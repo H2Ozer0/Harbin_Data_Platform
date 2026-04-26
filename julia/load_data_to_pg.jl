@@ -1,4 +1,4 @@
-using JLD2, LibPQ, Tables
+using JLD2, LibPQ, Tables, Dates
 
 # 1. 包含原始结构体定义
 if isfile("Trip.jl")
@@ -6,10 +6,10 @@ if isfile("Trip.jl")
 elseif isfile("julia/Trip.jl")
     include("julia/Trip.jl")
 else
-    error("找不到 Trip.jl 文件。")
+    error("找不到 Trip.jl 文件，请确保该文件在当前目录下。")
 end
 
-# 原生数组转换函数
+# --- 原生数组转换辅助函数 ---
 function to_float_array(arr)
     isnothing(arr) && return Float64[]
     return Float64[Float64(x) for x in vec(arr) if !isnothing(x)]
@@ -30,12 +30,15 @@ end
 # ==========================================
 completed_files = []
 
-# 2. 数据库连接
-conn = LibPQ.Connection("host=localhost port=5432 user=osmuser password=pass dbname=harbin")
+# 2. 数据库连接 (已修改为远程连接)
+# 请将下方 host 后的 IP 替换为你服务器的公网 IP
+db_url = "host=101.35.234.65 port=5432 user=osmuser password=pass dbname=postgres connect_timeout=10"
+println("📡 正在尝试连接远程服务器数据库...")
+conn = LibPQ.Connection(db_url)
 
 # 3. 自动定位包含文件的文件夹
 global_data_dir = ""
-for d in ["../data/jldpath", "./data/jldpath", "."]
+for d in ["../data/jldpath", "./data/jldpath", ".", "data/jldpath"]
     if isdir(d)
         global global_data_dir = d
         break
@@ -43,35 +46,35 @@ for d in ["../data/jldpath", "./data/jldpath", "."]
 end
 
 if global_data_dir == ""
-    error("找不到存放数据的文件夹 data/jldpath")
+    error("找不到存放数据的文件夹 data/jldpath，请检查路径。")
 end
 
-# 获取所有 .jld2 文件
 all_files = filter(f -> endswith(f, ".jld2"), readdir(global_data_dir))
-
 println("🎯 扫描到 $(length(all_files)) 个 .jld2 文件，准备开始处理...\n")
 
 # 4. 遍历处理文件
 for fname in all_files
     println("=========================================")
 
-    # 【关键防重判断】：如果文件已经在列表中，直接跳过
     if fname in completed_files
         println("⏭️ 文件 [ $(fname) ] 已经导入过，自动跳过。")
         continue
     end
 
     file_path = joinpath(global_data_dir, fname)
-    println("▶️ 正在导入新文件: $(fname)")
+    println("▶️ 正在处理文件: $(fname)")
 
     res = load(file_path)
     trips = res["trips"]
     total = length(trips)
-    println("   成功读取 $(total) 条轨迹，开始写入数据库...")
+    println("   成功读取 $(total) 条轨迹，开始远程写入...")
 
-    execute(conn, "BEGIN;")
+    # 设置分批提交的大小，防止 2G 内存服务器事务过载
+    batch_size = 1000
 
     try
+        execute(conn, "BEGIN;") # 显式开启事务
+
         for (i, t) in enumerate(trips)
             execute(conn, """
                 INSERT INTO ods.ods_taxi_trips_raw
@@ -90,19 +93,26 @@ for fname in all_files
                 to_string_array(t.route_geom)
             ])
 
-            if i % 5000 == 0
-                println("   >> 进度: $(i) / $(total) ($(round(i/total*100, digits=1))%)")
+            # 每处理 batch_size 条数据就提交一次，释放服务器内存压力
+            if i % batch_size == 0
+                execute(conn, "COMMIT;")
+                execute(conn, "BEGIN;")
+                println("   >> 已同步进度: $(i) / $(total) ($(round(i/total*100, digits=1))%)")
             end
         end
 
         execute(conn, "COMMIT;")
-        println("✅ 文件 $(fname) 导入完成！")
+        println("✅ 文件 $(fname) 远程导入完成！")
 
     catch e
         execute(conn, "ROLLBACK;")
-        println("❌ 文件 $(fname) 导入失败。详细错误: $(e)")
+        println("❌ 文件 $(fname) 发生错误。已回滚。详细错误: $e")
+        # 如果是连接断开，建议直接停止后续文件处理
+        if occursin("connection", lowercase(string(e)))
+            break
+        end
     end
 end
 
-println("\n🎉🎉 所有需要导入的文件已全部处理完毕！")
+println("\n🎉 所有任务处理完毕！")
 close(conn)

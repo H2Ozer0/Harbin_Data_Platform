@@ -1,4 +1,18 @@
 # Data Preparation for the Project of Data Platform course in DaSE ECNU
+
+## Runtime and Offline Modules
+
+This repository now has two clear parts for future feature development:
+
+- Runtime services:
+   - `backend/` (Spring Boot APIs, database queries)
+   - `frontend/` (Vue + MapLibre + deck.gl visualization)
+- Offline data pipeline:
+   - `julia/` (data conversion, map matching, data loading)
+   - `julia/deprecated/` (archived scripts not in current ingestion mainline)
+
+For day-to-day development and troubleshooting, see `docs/DEVELOPMENT.md`.
+
 ## Data Introduction
 The dataset contains 1 million+ trips collected by 1,3000+ taxi cabs during 5 days (2015.1.3-2015.1.7) and are stored as `.h5` files. Each h5 file contains `n` trips of the day. For each trip, it has three fields `lon` (longitude), `lat` (latitude), `tms` (timestamp). You can read the `h5` file using the `readtripsh5` function in Julia.
 ## Requirements
