@@ -35,6 +35,11 @@ spring:
       write-dates-as-timestamps: false
     date-format: yyyy-MM-dd HH:mm:ss
 
+logging:
+  level:
+    com.harbin.dataplatform: DEBUG
+    org.springframework.jdbc: DEBUG
+
 app:
   taxi:
     mock-enabled: false
