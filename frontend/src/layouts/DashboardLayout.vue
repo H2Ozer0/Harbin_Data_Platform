@@ -13,7 +13,7 @@
       </nav>
     </header>
 
-    <section class="timeline-bar">
+    <section v-if="showTimeline" class="timeline-bar">
       <label class="timeline-label">日期</label>
       <select v-model="store.selectedDate" class="date-select">
         <option v-for="d in store.availableDates" :key="d" :value="d">{{ d }}</option>
@@ -31,8 +31,12 @@
 </template>
 
 <script setup>
+import { computed } from 'vue'
+import { useRoute } from 'vue-router'
 import { useDashboardStore } from '@/stores/dashboardStore'
 const store = useDashboardStore()
+const route = useRoute()
+const showTimeline = computed(() => route.path !== '/trend')
 </script>
 
 <style scoped>
