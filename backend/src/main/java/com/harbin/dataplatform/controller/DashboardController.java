@@ -38,8 +38,9 @@ public class DashboardController {
 
     @GetMapping("/driver/rest-heatmap")
     public ResponseEntity<DriverRestHeatmapResponse> getDriverRestHeatmap(
-            @RequestParam String dt
+            @RequestParam String dt,
+            @RequestParam(required = false, defaultValue = "-1") int limit
     ) {
-        return ResponseEntity.ok(dashboardService.getDriverRestHeatmap(dt));
+        return ResponseEntity.ok(dashboardService.getDriverRestHeatmap(dt, limit));
     }
 }

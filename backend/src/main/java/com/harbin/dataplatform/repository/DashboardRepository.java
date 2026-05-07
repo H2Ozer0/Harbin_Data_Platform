@@ -58,12 +58,28 @@ public class DashboardRepository {
     }
 
     public List<Map<String, Object>> findRestLocations(String dt) {
-        String sql = """
+        return findRestLocations(dt, -1);
+    }
+
+    public List<Map<String, Object>> findRestLocations(String dt, int limit) {
+        String sql;
+        if (limit > 0) {
+            sql = """
+                SELECT r.devid, r.lon, r.lat, r.rest_minutes, r.rest_start, s.shift_pattern
+                FROM tdm.driver_rest_location r
+                LEFT JOIN tdm.driver_shift_pattern s
+                  ON r.devid = s.devid AND r.dt = s.dt
+                WHERE r.dt = ?::date
+                LIMIT ?
+            """;
+            return jdbcTemplate.queryForList(sql, dt, limit);
+        }
+        sql = """
             SELECT r.devid, r.lon, r.lat, r.rest_minutes, r.rest_start, s.shift_pattern
             FROM tdm.driver_rest_location r
             LEFT JOIN tdm.driver_shift_pattern s
               ON r.devid = s.devid AND r.dt = s.dt
-                        WHERE r.dt = ?::date
+            WHERE r.dt = ?::date
         """;
         return jdbcTemplate.queryForList(sql, dt);
     }

@@ -76,8 +76,13 @@ public class DashboardServiceImpl implements DashboardService {
 
     @Override
     public DriverRestHeatmapResponse getDriverRestHeatmap(String dt) {
+        return getDriverRestHeatmap(dt, -1);
+    }
+
+    @Override
+    public DriverRestHeatmapResponse getDriverRestHeatmap(String dt, int limit) {
         validateDate(dt);
-        List<Map<String, Object>> rows = dashboardRepository.findRestLocations(dt);
+        List<Map<String, Object>> rows = dashboardRepository.findRestLocations(dt, limit);
         List<DriverRestLocationDTO> locations = new ArrayList<>();
 
         for (Map<String, Object> row : rows) {
@@ -92,7 +97,9 @@ public class DashboardServiceImpl implements DashboardService {
         }
 
         long total = dashboardRepository.countRestLocations(dt);
-        return new DriverRestHeatmapResponse(locations, total);
+        DriverRestHeatmapResponse resp = new DriverRestHeatmapResponse(locations, total);
+        resp.setLimit(limit);
+        return resp;
     }
 
     private void validateDate(String dt) {

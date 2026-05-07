@@ -11,3 +11,4 @@ data/
 *.csv
 *.h5
 .vscode/
+opencode.json

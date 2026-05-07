@@ -147,7 +147,7 @@ function extract_and_insert(conn_ref, points::DataFrame; batch_size::Int=1000)
         for i in gap_idx
             gap_sec = diffs[i]
             rest_minutes = gap_sec / 60.0
-            if rest_minutes < MIN_DURATION_MINUTES
+            if rest_minutes < MIN_DURATION_MINUTES || rest_minutes > MAX_DURATION_MINUTES
                 continue
             end
             start_ts = tms[i]
@@ -213,7 +213,7 @@ function extract_and_insert_by_driver(conn_ref; driver_limit::Union{Nothing,Int}
         for i in gap_idx
             gap_sec = diffs[i]
             rest_minutes = gap_sec / 60.0
-            if rest_minutes < MIN_DURATION_MINUTES
+            if rest_minutes < MIN_DURATION_MINUTES || rest_minutes > MAX_DURATION_MINUTES
                 continue
             end
             start_ts = tms[i]

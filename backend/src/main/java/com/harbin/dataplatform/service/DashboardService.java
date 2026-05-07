@@ -10,4 +10,6 @@ public interface DashboardService {
     DriverBehaviorResponse getDriverBehavior(String dt);
 
     DriverRestHeatmapResponse getDriverRestHeatmap(String dt);
+
+    DriverRestHeatmapResponse getDriverRestHeatmap(String dt, int limit);
 }
