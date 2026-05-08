@@ -112,7 +112,7 @@ const showTimeline = computed(() => route.path !== '/trend')
   font-size: 13px;
   font-family: 'Courier New', monospace;
   color: #fff;
-  background: rgba(255, 255, 255, 0.08);
+  background: #1a1f2e;
   border: 1px solid rgba(0, 204, 255, 0.2);
   border-radius: 6px;
   outline: none;
@@ -121,6 +121,11 @@ const showTimeline = computed(() => route.path !== '/trend')
 
 .date-select:focus {
   border-color: #0cf;
+}
+
+.date-select option {
+  background: #1a1f2e;
+  color: #fff;
 }
 
 .hour-slider {

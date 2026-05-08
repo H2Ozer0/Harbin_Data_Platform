@@ -177,9 +177,16 @@ const sparklineData = computed(() => {
 })
 
 // --- API ---
+function getDayType(date) {
+  const d = new Date(date)
+  const day = d.getDay()
+  // 0=Sun, 6=Sat → weekend; 1-5 → workday
+  return (day === 0 || day === 6) ? 'weekend' : 'workday'
+}
+
 async function fetchSingleHour(date, hour, signal) {
   const resp = await axios.get('/api/dashboard/congestion/heatmap', {
-    params: { dt: date, hour, day_type: 'workday' },
+    params: { dt: date, hour, day_type: getDayType(date) },
     signal,
   })
   return resp.data.segments || []
@@ -546,6 +553,14 @@ function updateChart() {
     return '#00e676'
   }
 
+  // 速度 → 文字标签（柱状图 tooltip 用）
+  function speedLabel(speed) {
+    if (speed < 15) return '拥堵'
+    if (speed < 25) return '异常降速'
+    if (speed < 40) return '偏慢'
+    return '畅通'
+  }
+
   const option = {
     backgroundColor: 'transparent',
     grid: {
@@ -800,9 +815,10 @@ watch(selectedSegment, () => {
   flex-direction: column;
   gap: 4px;
   padding: 8px 12px;
-  background: rgba(255, 255, 255, 0.85);
+  background: rgba(6, 10, 22, 0.88);
   border-radius: 6px;
-  backdrop-filter: blur(4px);
+  backdrop-filter: blur(6px);
+  border: 1px solid rgba(0, 204, 255, 0.12);
 }
 
 .legend-item {
@@ -810,7 +826,7 @@ watch(selectedSegment, () => {
   align-items: center;
   gap: 8px;
   font-size: 11px;
-  color: rgba(0, 0, 0, 0.65);
+  color: rgba(255, 255, 255, 0.7);
   font-family: 'Courier New', monospace;
 }
 
@@ -821,7 +837,25 @@ watch(selectedSegment, () => {
   flex-shrink: 0;
 }
 
-.map-loading,
+.map-loading {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  z-index: 50;
+  pointer-events: none;
+  color: rgba(6, 10, 22, 0.7);
+  font-size: 13px;
+  background: rgba(255, 255, 255, 0.75);
+  padding: 16px 24px;
+  border-radius: 8px;
+  backdrop-filter: blur(4px);
+}
+
 .map-error {
   position: absolute;
   top: 50%;
@@ -833,12 +867,16 @@ watch(selectedSegment, () => {
   gap: 10px;
   z-index: 50;
   pointer-events: none;
-  color: rgba(0, 0, 0, 0.5);
+  color: #d50000;
   font-size: 13px;
+  background: rgba(255, 255, 255, 0.85);
+  padding: 16px 24px;
+  border-radius: 8px;
+  backdrop-filter: blur(4px);
 }
 
 .map-error {
-  color: #ff3d3d;
+  color: #d50000;
 }
 
 .error-icon {
@@ -848,8 +886,8 @@ watch(selectedSegment, () => {
 .spinner {
   width: 36px;
   height: 36px;
-  border: 3px solid rgba(0, 0, 0, 0.1);
-  border-top-color: #0cf;
+  border: 3px solid rgba(6, 10, 22, 0.1);
+  border-top-color: #00e676;
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
