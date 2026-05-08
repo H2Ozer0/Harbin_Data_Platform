@@ -37,9 +37,10 @@ public class DashboardService {
             Double avgSpeed = toDouble(row.get("avg_speed_kmh"));
             Double ci = toDouble(row.get("congestion_index"));
             Double deviation = toDouble(row.get("deviation_pct"));
+            Integer tripCount = toInteger(row.get("trip_count"));
             String geometry = toStringOrNull(row.get("geometry"));
 
-            segments.add(new CongestionHeatmapDTO(segId, roadName, avgSpeed, ci, deviation, null, null, geometry));
+            segments.add(new CongestionHeatmapDTO(segId, roadName, avgSpeed, ci, deviation, tripCount, null, null, geometry));
         }
 
         return new HeatmapResponse(segments, segments.size());
@@ -106,6 +107,20 @@ public class DashboardService {
         return new ComparisonResponseDTO(hourly);
     }
 
+    /**
+     * 道路类型 × 24h 速度曲线
+     */
+    public List<Map<String, Object>> getRoadTypeSpeed(String dt) {
+        return dashboardRepository.findRoadTypeSpeedByHour(dt);
+    }
+
+    /**
+     * 拥堵持续时间 Top10 排行
+     */
+    public List<Map<String, Object>> getCongestionDurationRanking(String dt) {
+        return dashboardRepository.findCongestionDurationRanking(dt);
+    }
+
     private Long toLong(Object obj) {
         if (obj == null) return null;
         if (obj instanceof Number n) return n.longValue();
@@ -127,6 +142,12 @@ public class DashboardService {
         if (obj == null) return null;
         if (obj instanceof Number n) return n.doubleValue();
         return Double.parseDouble(obj.toString());
+    }
+
+    private Integer toInteger(Object obj) {
+        if (obj == null) return null;
+        if (obj instanceof Number n) return n.intValue();
+        return Integer.parseInt(obj.toString());
     }
 
     private String toStringOrNull(Object obj) {

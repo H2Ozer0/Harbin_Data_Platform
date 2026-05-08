@@ -11,6 +11,7 @@ public class CongestionHeatmapDTO {
     private Double avgSpeedKmh;
     private Double congestionIndex;
     private Double deviationPct;
+    private Integer tripCount;
     private Double lon;
     private Double lat;
     private String geometry;

@@ -10,6 +10,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 @Slf4j
@@ -66,6 +68,28 @@ public class DashboardController {
 
         log.info("GET /congestion/trend?start_dt={}&end_dt={}", start_dt, end_dt);
         TrendResponseDTO response = dashboardService.getTrend(start_dt, end_dt);
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/congestion/road-type-speed")
+    public ResponseEntity<List<Map<String, Object>>> getRoadTypeSpeed(
+            @RequestParam String dt
+    ) {
+        validateDate(dt);
+
+        log.info("GET /congestion/road-type-speed?dt={}", dt);
+        List<Map<String, Object>> response = dashboardService.getRoadTypeSpeed(dt);
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/congestion/duration-ranking")
+    public ResponseEntity<List<Map<String, Object>>> getCongestionDuration(
+            @RequestParam String dt
+    ) {
+        validateDate(dt);
+
+        log.info("GET /congestion/duration-ranking?dt={}", dt);
+        List<Map<String, Object>> response = dashboardService.getCongestionDurationRanking(dt);
         return ResponseEntity.ok(response);
     }
 
