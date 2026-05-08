@@ -19,6 +19,14 @@ export async function getCongestionComparison() {
   const resp = await api.get('/congestion/comparison');
   return resp.data;
 }
+export async function getRoadTypeSpeed(dt) {
+  const resp = await api.get('/congestion/road-type-speed', { params: { dt } });
+  return resp.data;
+}
+export async function getCongestionDurationRanking(dt) {
+  const resp = await api.get('/congestion/duration-ranking', { params: { dt } });
+  return resp.data;
+}
 // P2: Hotspot & Driver stubs
 export async function getHotspotMap(dt, hour, eventType) { return { grids: [], total_grids: 0 }; }
 export async function getDriverBehavior(dt) { return { shift_distribution: [], avg_active_minutes_by_pattern: [], total_drivers: 0 }; }
