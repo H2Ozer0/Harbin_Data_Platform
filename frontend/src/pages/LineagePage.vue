@@ -28,7 +28,13 @@
           </div>
         </div>
         <div class="lineage-graph">
-          <svg viewBox="0 0 800 400" class="lineage-svg">
+          <svg viewBox="0 0 900 500" class="lineage-svg">
+            <!-- 箭头定义 -->
+            <defs>
+              <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+                <polygon points="0 0, 10 3.5, 0 7" fill="rgba(0, 204, 255, 0.4)" />
+              </marker>
+            </defs>
             <!-- 连接线 -->
             <line
               v-for="edge in displayedEdges"
@@ -143,14 +149,14 @@ const layers = [
 const lineageData = ref({ nodes: [], edges: [] })
 const qualityTables = ref([])
 
-// 节点位置配置
+// 节点位置配置（与后端返回的 ID 匹配）
 const nodePositions = {
-  ods_taxi_trips_raw: { x: 50, y: 175 },
-  fact_congestion_seg_hour: { x: 250, y: 100 },
-  driver_shift_pattern: { x: 250, y: 250 },
-  grid_hotspot_score: { x: 250, y: 350 },
-  congestion_baseline_5day: { x: 450, y: 100 },
-  ads_congestion_by_segment_hour: { x: 650, y: 100 }
+  'ods_taxi_trips_raw': { x: 50, y: 200 },
+  'fact_congestion_seg_hour': { x: 280, y: 100 },
+  'driver_shift_pattern': { x: 280, y: 250 },
+  'grid_hotspot_score': { x: 280, y: 350 },
+  'congestion_baseline_5day': { x: 500, y: 100 },
+  'ads_congestion_by_segment_hour': { x: 720, y: 100 }
 }
 
 onMounted(async () => {
@@ -326,8 +332,8 @@ function formatDate(dateStr) {
 
 .lineage-svg {
   width: 100%;
-  height: 400px;
-  max-width: 900px;
+  height: 500px;
+  max-width: 1000px;
 }
 
 .edge-line {
