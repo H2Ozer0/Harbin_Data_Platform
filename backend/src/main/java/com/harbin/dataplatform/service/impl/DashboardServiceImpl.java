@@ -8,6 +8,7 @@ import com.harbin.dataplatform.repository.DashboardRepository;
 import com.harbin.dataplatform.service.DashboardService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
@@ -27,6 +28,7 @@ public class DashboardServiceImpl implements DashboardService {
     // ========== P1: Congestion ==========
 
     @Override
+    @Cacheable(value = "heatmap", key = "#dt + '_' + #hour + '_' + #dayType")
     public HeatmapResponse getHeatmap(String dt, int hour, String dayType) {
         List<Map<String, Object>> rows = dashboardRepository.findHeatmapByDtHourAndDayType(dt, hour, dayType);
 
@@ -34,19 +36,21 @@ public class DashboardServiceImpl implements DashboardService {
         for (Map<String, Object> row : rows) {
             Long segId = toLong(row.get("road_segment_id"));
             String roadName = toStringOrNull(row.get("road_name"));
+            String roadType = toStringOrNull(row.get("road_type"));
             Double avgSpeed = toDouble(row.get("avg_speed_kmh"));
             Double ci = toDouble(row.get("congestion_index"));
             Double deviation = toDouble(row.get("deviation_pct"));
             Integer tripCount = toInteger(row.get("trip_count"));
             String geometry = toStringOrNull(row.get("geometry"));
 
-            segments.add(new CongestionHeatmapDTO(segId, roadName, avgSpeed, ci, deviation, tripCount, null, null, geometry));
+            segments.add(new CongestionHeatmapDTO(segId, roadName, roadType, avgSpeed, ci, deviation, tripCount, null, null, geometry));
         }
 
         return new HeatmapResponse(segments, segments.size());
     }
 
     @Override
+    @Cacheable(value = "kpi", key = "#dt")
     public KPIResponseDTO getKPI(String dt) {
         List<Map<String, Object>> kpiRows = dashboardRepository.findKPIByDt(dt);
         Map<String, Object> kpiRow = kpiRows.isEmpty() ? Map.of() : kpiRows.get(0);
@@ -65,6 +69,7 @@ public class DashboardServiceImpl implements DashboardService {
     }
 
     @Override
+    @Cacheable(value = "trend", key = "#startDt + '_' + #endDt")
     public TrendResponseDTO getTrend(String startDt, String endDt) {
         List<Map<String, Object>> rows = dashboardRepository.findTrendByDateRange(startDt, endDt);
 
@@ -81,6 +86,7 @@ public class DashboardServiceImpl implements DashboardService {
     }
 
     @Override
+    @Cacheable(value = "comparison", key = "'all'")
     public ComparisonResponseDTO getComparison() {
         List<Map<String, Object>> rows = dashboardRepository.findComparisonByHour();
 
@@ -101,11 +107,13 @@ public class DashboardServiceImpl implements DashboardService {
     }
 
     @Override
+    @Cacheable(value = "roadTypeSpeed", key = "#dt")
     public List<Map<String, Object>> getRoadTypeSpeed(String dt) {
         return dashboardRepository.findRoadTypeSpeedByHour(dt);
     }
 
     @Override
+    @Cacheable(value = "durationRanking", key = "#dt")
     public List<Map<String, Object>> getCongestionDurationRanking(String dt) {
         return dashboardRepository.findCongestionDurationRanking(dt);
     }
@@ -113,6 +121,7 @@ public class DashboardServiceImpl implements DashboardService {
     // ========== P2: Hotspot & Driver ==========
 
     @Override
+    @Cacheable(value = "hotspotGrid", key = "#dt + '_' + #hour + '_' + #eventType")
     public HotspotGridResponse getHotspotGrid(String dt, int hour, String eventType) {
         validateDate(dt);
         if (hour < 0 || hour > 23) {
@@ -140,6 +149,7 @@ public class DashboardServiceImpl implements DashboardService {
     }
 
     @Override
+    @Cacheable(value = "driverBehavior", key = "#dt")
     public DriverBehaviorResponse getDriverBehavior(String dt) {
         validateDate(dt);
         List<Map<String, Object>> rows = dashboardRepository.findDriverBehavior(dt);
@@ -167,6 +177,7 @@ public class DashboardServiceImpl implements DashboardService {
     }
 
     @Override
+    @Cacheable(value = "restHeatmap", key = "#dt + '_' + #limit")
     public DriverRestHeatmapResponse getDriverRestHeatmap(String dt, int limit) {
         validateDate(dt);
         List<Map<String, Object>> rows = dashboardRepository.findRestLocations(dt, limit);

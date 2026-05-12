@@ -12,6 +12,10 @@
         >{{ tab.label }}</RouterLink>
       </nav>
       <div class="header-info">
+        <button class="map-style-toggle" @click="store.toggleMapStyle()" :title="store.mapStyle === 'dark' ? '切换浅色底图' : '切换深色底图'">
+          <span v-if="store.mapStyle === 'dark'" class="toggle-icon">☀</span>
+          <span v-else class="toggle-icon">🌙</span>
+        </button>
         <span class="badge live">● 数据大屏</span>
       </div>
     </header>
@@ -28,7 +32,11 @@
     </section>
 
     <main class="dash-main">
-      <RouterView />
+      <RouterView v-slot="{ Component }">
+        <KeepAlive>
+          <component :is="Component" />
+        </KeepAlive>
+      </RouterView>
     </main>
   </div>
 </template>
@@ -114,7 +122,32 @@ const tabs = [
 .header-info {
   display: flex;
   align-items: center;
+  gap: 8px;
   flex-shrink: 0;
+}
+
+.map-style-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 14px;
+  border: 1px solid rgba(0, 204, 255, 0.2);
+  background: rgba(0, 204, 255, 0.06);
+  cursor: pointer;
+  transition: all 0.2s;
+  padding: 0;
+}
+
+.map-style-toggle:hover {
+  background: rgba(0, 204, 255, 0.15);
+  border-color: rgba(0, 204, 255, 0.4);
+}
+
+.toggle-icon {
+  font-size: 14px;
+  line-height: 1;
 }
 
 .badge {

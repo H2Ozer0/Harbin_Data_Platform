@@ -126,23 +126,33 @@ function buildDeckLayers() {
   return layers
 }
 
+function getMapTileUrl() {
+  return store.mapStyle === 'dark'
+    ? 'https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png'
+    : 'https://basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png'
+}
+
+function buildMapStyle() {
+  return {
+    version: 8,
+    sources: {
+      'carto-tiles': {
+        type: 'raster',
+        tiles: [getMapTileUrl()],
+        tileSize: 256,
+      },
+    },
+    glyphs: 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf',
+    layers: [
+      { id: 'carto', type: 'raster', source: 'carto-tiles', minzoom: 0, maxzoom: 19 },
+    ],
+  }
+}
+
 function initMap() {
   map = new Map({
     container: containerRef.value,
-    style: {
-      version: 8,
-      sources: {
-        'carto-dark': {
-          type: 'raster',
-          tiles: ['https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png'],
-          tileSize: 256,
-        },
-      },
-      glyphs: 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf',
-      layers: [
-        { id: 'carto', type: 'raster', source: 'carto-dark', minzoom: 0, maxzoom: 19 },
-      ],
-    },
+    style: buildMapStyle(),
     center: [store.HARBIN_CENTER[0], store.HARBIN_CENTER[1]],
     zoom: 10,
     pitch: 0,
@@ -188,6 +198,10 @@ function refresh() {
 watch([() => store.boundaries, () => store.trajectoryPoints], () => {
   refresh()
 }, { deep: true })
+
+watch(() => store.mapStyle, () => {
+  if (map) map.setStyle(buildMapStyle())
+})
 
 onMounted(async () => {
   await nextTick()

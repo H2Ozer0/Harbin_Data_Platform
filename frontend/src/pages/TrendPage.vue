@@ -259,8 +259,8 @@ function updateSpeedChart() {
     yAxis: {
       type: 'value',
       name: 'km/h',
-      min: 15,
-      max: 35,
+      min: (value) => Math.floor(value.min / 5) * 5,
+      max: (value) => Math.ceil(value.max / 5) * 5,
       nameTextStyle: { color: 'rgba(255,255,255,0.5)', fontSize: 10 },
       axisLine: { show: false },
       axisLabel: { color: 'rgba(255,255,255,0.5)', fontSize: 10 },
@@ -340,25 +340,35 @@ function mergePeakSegments(hourSegmentsArrays) {
   return Array.from(segMap.values())
 }
 
+function getTrendTileUrl() {
+  return store.mapStyle === 'dark'
+    ? 'https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png'
+    : 'https://basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png'
+}
+
+function buildTrendMapStyle() {
+  return {
+    version: 8,
+    sources: {
+      'carto-tiles': {
+        type: 'raster',
+        tiles: [getTrendTileUrl()],
+        tileSize: 256,
+      },
+    },
+    glyphs: 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf',
+    layers: [
+      { id: 'carto', type: 'raster', source: 'carto-tiles', minzoom: 0, maxzoom: 19 },
+    ],
+  }
+}
+
 function initPeakMap() {
   if (!peakMapRef.value) return
 
   peakMap = new Map({
     container: peakMapRef.value,
-    style: {
-      version: 8,
-      sources: {
-        'carto-light': {
-          type: 'raster',
-          tiles: ['https://basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png'],
-          tileSize: 256,
-        },
-      },
-      glyphs: 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf',
-      layers: [
-        { id: 'carto', type: 'raster', source: 'carto-light', minzoom: 0, maxzoom: 19 },
-      ],
-    },
+    style: buildTrendMapStyle(),
     center: [126.63, 45.75],
     zoom: 11,
     pitch: 0,
@@ -680,6 +690,10 @@ watch(peakMode, () => {
   if (peakMap && peakMap.loaded()) {
     updatePeakMap()
   }
+})
+
+watch(() => store.mapStyle, () => {
+  if (peakMap) peakMap.setStyle(buildTrendMapStyle())
 })
 </script>
 

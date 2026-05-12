@@ -15,8 +15,8 @@ $listeners = Get-NetTCPConnection -LocalPort $targetPort -State Listen -ErrorAct
 if ($listeners) {
     $owners = $listeners | Select-Object -ExpandProperty OwningProcess -Unique
     if ($KillPortOwner) {
-        foreach ($pid in $owners) {
-            Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue
+        foreach ($procId in $owners) {
+            Stop-Process -Id $procId -Force -ErrorAction SilentlyContinue
         }
         Start-Sleep -Seconds 1
     } else {

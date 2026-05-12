@@ -81,6 +81,21 @@ LEFT JOIN tdm.driver_rest_location r
 GROUP BY s.dt, s.shift_pattern;
 """
 
+DRIVER_REST_SQL = """
+INSERT INTO ads.driver_rest_enriched
+(dt, devid, lon, lat, rest_minutes, rest_start, shift_pattern)
+SELECT r.dt,
+       r.devid,
+       r.lon,
+       r.lat,
+       r.rest_minutes,
+       r.rest_start,
+       s.shift_pattern
+FROM tdm.driver_rest_location r
+LEFT JOIN tdm.driver_shift_pattern s
+  ON r.devid = s.devid AND r.dt = s.dt;
+"""
+
 
 def get_conn_params():
     return {
@@ -103,6 +118,7 @@ def main():
             print("Truncating ADS tables...")
             cur.execute("TRUNCATE ads.hotspot_grid_enriched;")
             cur.execute("TRUNCATE ads.driver_behavior_summary;")
+            cur.execute("TRUNCATE ads.driver_rest_enriched;")
 
             print("Filling ads.hotspot_grid_enriched...")
             cur.execute(HOTSPOT_SQL)
@@ -111,6 +127,10 @@ def main():
             print("Filling ads.driver_behavior_summary...")
             cur.execute(DRIVER_SQL)
             print(f"Inserted driver rows: {cur.rowcount}")
+
+            print("Filling ads.driver_rest_enriched...")
+            cur.execute(DRIVER_REST_SQL)
+            print(f"Inserted driver rest rows: {cur.rowcount}")
 
         conn.commit()
         print("Done.")

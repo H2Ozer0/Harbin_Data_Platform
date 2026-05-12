@@ -9,6 +9,9 @@ import 'maplibre-gl/dist/maplibre-gl.css'
 import { HeatmapLayer } from '@deck.gl/aggregation-layers'
 import { ScatterplotLayer } from '@deck.gl/layers'
 import { MapboxOverlay } from '@deck.gl/mapbox'
+import { useDashboardStore } from '@/stores/dashboardStore'
+
+const store = useDashboardStore()
 
 const props = defineProps({
   heatmapPoints: {
@@ -130,41 +133,33 @@ function buildLayers() {
   return layers
 }
 
+function getTileUrl() {
+  return store.mapStyle === 'dark'
+    ? 'https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png'
+    : 'https://basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png'
+}
+
+function buildStyle() {
+  return {
+    version: 8,
+    sources: {
+      'carto-tiles': {
+        type: 'raster',
+        tiles: [getTileUrl()],
+        tileSize: 256,
+      },
+    },
+    glyphs: 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf',
+    layers: [
+      { id: 'carto', type: 'raster', source: 'carto-tiles', minzoom: 0, maxzoom: 19 },
+    ],
+  }
+}
+
 function initMap() {
   map = new Map({
     container: containerRef.value,
-    style: {
-      version: 8,
-      name: 'Dark',
-      sources: {
-        'osm-tiles': {
-          type: 'raster',
-          tiles: [
-            'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
-            'https://webrd02.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
-            'https://webrd03.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
-            'https://webrd04.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
-          ],
-          tileSize: 256,
-          attribution: '? Amap',
-        },
-      },
-      glyphs: 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf',
-      layers: [
-        {
-          id: 'background',
-          type: 'background',
-          paint: { 'background-color': '#0a0e1a' },
-        },
-        {
-          id: 'osm-raster',
-          type: 'raster',
-          source: 'osm-tiles',
-          minzoom: 0,
-          maxzoom: 19,
-        },
-      ],
-    },
+    style: buildStyle(),
     center: props.center,
     zoom: props.zoom,
     pitch: 0,
@@ -207,6 +202,10 @@ watch(
   },
   { deep: true }
 )
+
+watch(() => store.mapStyle, () => {
+  if (map) map.setStyle(buildStyle())
+})
 
 onMounted(async () => {
   await nextTick()

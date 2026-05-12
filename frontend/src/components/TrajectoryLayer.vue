@@ -1,18 +1,18 @@
 <template>
   <div class="trajectory-hud">
     <div v-if="store.loading" class="hud-loading">
-      &#21152;&#36733;&#20013;...
+      加载中...
     </div>
     <div v-if="store.error" class="hud-error">
       {{ store.error }}
     </div>
     <div v-if="store.pointCount > 0" class="hud-stats">
       <div class="stat-row">
-        <span class="stat-label">&#21487;&#35265;&#28857;&#20301;</span>
+        <span class="stat-label">可见点位</span>
         <span class="stat-value">{{ store.pointCount.toLocaleString() }}</span>
       </div>
       <div v-if="store.stats" class="stat-row">
-        <span class="stat-label">&#36712;&#36857;&#25968;&#37327;</span>
+        <span class="stat-label">轨迹数量</span>
         <span class="stat-value">{{ store.stats.tripCount }}</span>
       </div>
     </div>

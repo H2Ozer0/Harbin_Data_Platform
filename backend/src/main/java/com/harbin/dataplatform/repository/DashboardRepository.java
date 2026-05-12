@@ -25,22 +25,18 @@ public class DashboardRepository {
             SELECT
                 c.road_segment_id,
                 c.road_name,
+                c.road_type,
                 c.avg_speed_kmh,
                 c.congestion_index,
                 c.deviation_pct,
-                f.trip_count,
-                ST_AsGeoJSON(r.geom) AS geometry
+                c.trip_count,
+                ST_AsGeoJSON(c.geometry) AS geometry
             FROM ads.congestion_by_segment_hour c
-            JOIN dw.dim_road_segment r ON r.road_segment_id = c.road_segment_id
-            JOIN dw.fact_congestion_seg_hour f
-              ON f.road_segment_id = c.road_segment_id
-             AND f.dt = c.dt
-             AND f.hour_of_day = c.hour_of_day
             WHERE c.dt = ?::date
               AND c.hour_of_day = ?
               AND c.day_type = ?
-              AND f.trip_count >= 10
-              AND r.length_m >= 100
+              AND c.trip_count >= 10
+              AND c.length_m >= 100
             ORDER BY c.congestion_index DESC
         """;
         return jdbcTemplate.queryForList(sql, dt, hour, dayType);
@@ -59,13 +55,6 @@ public class DashboardRepository {
                 FROM ads.congestion_by_segment_hour c
                 WHERE c.dt = ?::date
             ),
-            top_congested AS (
-                SELECT c.road_name, c.congestion_index
-                FROM ads.congestion_by_segment_hour c
-                WHERE c.dt = ?::date AND c.road_name IS NOT NULL
-                ORDER BY c.congestion_index DESC
-                LIMIT 5
-            ),
             most_active_hour AS (
                 SELECT c.hour_of_day
                 FROM ads.congestion_by_segment_hour c
@@ -73,23 +62,16 @@ public class DashboardRepository {
                 GROUP BY c.hour_of_day
                 ORDER BY COUNT(*) DESC
                 LIMIT 1
-            ),
-            vehicle_count AS (
-                SELECT COUNT(DISTINCT t.devid) AS total_vehicles
-                FROM ods.ods_taxi_trips_raw t
-                WHERE (t.tms_seq)[1] >= EXTRACT(EPOCH FROM (?::date::timestamp))
-                  AND (t.tms_seq)[1] < EXTRACT(EPOCH FROM (?::date::timestamp + INTERVAL '1 day'))
             )
             SELECT
-                COALESCE(v.total_vehicles, 0) AS total_vehicles,
+                0 AS total_vehicles,
                 COALESCE(s.total_trips, 0) AS total_trips,
                 s.avg_speed_kmh,
                 h.hour_of_day AS most_active_hour
             FROM daily_stats s
             CROSS JOIN most_active_hour h
-            CROSS JOIN vehicle_count v
         """;
-        return jdbcTemplate.queryForList(sql, dt, dt, dt, dt, dt);
+        return jdbcTemplate.queryForList(sql, dt, dt);
     }
 
     /**
@@ -155,13 +137,9 @@ public class DashboardRepository {
                 ROUND(AVG(c.avg_speed_kmh)::numeric, 1) AS avg_speed,
                 COUNT(*) AS segment_count
             FROM ads.congestion_by_segment_hour c
-            JOIN dw.fact_congestion_seg_hour f
-              ON f.road_segment_id = c.road_segment_id
-             AND f.dt = c.dt
-             AND f.hour_of_day = c.hour_of_day
             WHERE c.dt = ?::date
               AND c.road_type IN ('trunk', 'primary', 'secondary', 'residential')
-              AND f.trip_count >= 10
+              AND c.trip_count >= 10
             GROUP BY c.hour_of_day, c.road_type
             ORDER BY c.hour_of_day, c.road_type
         """;
@@ -181,15 +159,11 @@ public class DashboardRepository {
                 ROUND(AVG(c.avg_speed_kmh)::numeric, 1) AS avg_speed_when_congested,
                 ROUND(MIN(c.deviation_pct)::numeric, 1) AS worst_deviation
             FROM ads.congestion_by_segment_hour c
-            JOIN dw.fact_congestion_seg_hour f
-              ON f.road_segment_id = c.road_segment_id
-             AND f.dt = c.dt
-             AND f.hour_of_day = c.hour_of_day
             WHERE c.dt = ?::date
               AND c.road_name IS NOT NULL
               AND c.deviation_pct < -20
               AND c.avg_speed_kmh < 20
-              AND f.trip_count >= 10
+              AND c.trip_count >= 10
             GROUP BY c.road_segment_id, c.road_name, c.road_type
             ORDER BY congestion_hours DESC, avg_speed_when_congested ASC
             LIMIT 10
@@ -247,21 +221,17 @@ public class DashboardRepository {
         String sql;
         if (limit > 0) {
             sql = """
-                SELECT r.devid, r.lon, r.lat, r.rest_minutes, r.rest_start, s.shift_pattern
-                FROM tdm.driver_rest_location r
-                LEFT JOIN tdm.driver_shift_pattern s
-                  ON r.devid = s.devid AND r.dt = s.dt
-                WHERE r.dt = ?::date
+                SELECT devid, lon, lat, rest_minutes, rest_start, shift_pattern
+                FROM ads.driver_rest_enriched
+                WHERE dt = ?::date
                 LIMIT ?
             """;
             return jdbcTemplate.queryForList(sql, dt, limit);
         }
         sql = """
-            SELECT r.devid, r.lon, r.lat, r.rest_minutes, r.rest_start, s.shift_pattern
-            FROM tdm.driver_rest_location r
-            LEFT JOIN tdm.driver_shift_pattern s
-              ON r.devid = s.devid AND r.dt = s.dt
-            WHERE r.dt = ?::date
+            SELECT devid, lon, lat, rest_minutes, rest_start, shift_pattern
+            FROM ads.driver_rest_enriched
+            WHERE dt = ?::date
         """;
         return jdbcTemplate.queryForList(sql, dt);
     }
@@ -269,7 +239,7 @@ public class DashboardRepository {
     public long countRestLocations(String dt) {
         String sql = """
             SELECT COUNT(*)
-            FROM tdm.driver_rest_location
+            FROM ads.driver_rest_enriched
             WHERE dt = ?::date
         """;
         Integer count = jdbcTemplate.queryForObject(sql, Integer.class, dt);

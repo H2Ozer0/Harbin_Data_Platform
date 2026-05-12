@@ -62,7 +62,8 @@ def fill_congestion_data(conn):
             congestion_index,
             baseline_speed_kmh,
             deviation_pct,
-            day_type
+            day_type,
+            trip_count, length_m, geometry
         )
         SELECT
             f.dt,
@@ -80,7 +81,10 @@ def fill_congestion_data(conn):
                 THEN (f.avg_speed_kmh - b.baseline_speed_kmh) / b.baseline_speed_kmh * 100.0
                 ELSE NULL
             END AS deviation_pct,
-            COALESCE(f.day_type, 'unknown') AS day_type
+            COALESCE(f.day_type, 'unknown') AS day_type,
+            COALESCE(f.trip_count, 0) AS trip_count,
+            dr.length_m,
+            dr.geom AS geometry
         FROM dw.fact_congestion_seg_hour f
         LEFT JOIN tdm.congestion_baseline_5day b
             ON b.road_segment_id = f.road_segment_id

@@ -192,7 +192,7 @@ async function fetchSingleHour(date, hour, signal) {
   return resp.data.segments || []
 }
 
-/** 预加载指定日期全部 24 小时数据；先加载当前小时（立即显示），其余并行 */
+/** 加载指定日期的数据；先加载当前小时（立即显示），其余后台静默预加载 */
 async function prefetchAllHours(date, currentHour) {
   // 取消上一次未完成的预加载
   if (prefetchAbort) prefetchAbort.abort()
@@ -222,22 +222,23 @@ async function prefetchAllHours(date, currentHour) {
   }
   loading.value = false
 
-  // 2) 后台并行加载其余 23 小时（分批，每批 4 个避免打爆浏览器连接）
+  // 2) 后台静默加载其余小时（每次 2 个并发，不阻塞 UI）
   const remaining = Array.from({ length: 24 }, (_, i) => i).filter(h => h !== currentHour)
-  const batchSize = 4
+  const batchSize = 2
   for (let i = 0; i < remaining.length; i += batchSize) {
     if (ac.signal.aborted) return
     const batch = remaining.slice(i, i + batchSize)
     const results = await Promise.allSettled(
-      batch.map(h => fetchSingleHour(date, h, ac.signal)),
+      batch.map(h => fetchSingleHour(date, h, ac.signal).catch(() => null)),
     )
     if (ac.signal.aborted) return
     results.forEach((r, idx) => {
-      if (r.status === 'fulfilled') {
+      if (r.status === 'fulfilled' && r.value) {
         hourCache.set(batch[idx], r.value)
       }
     })
-    prefetchAllProgress.value = hourCache.size
+    // 每批之间让出主线程，避免卡顿
+    await new Promise(r => setTimeout(r, 50))
   }
 }
 
@@ -254,6 +255,12 @@ function switchHour(hour) {
 }
 
 // --- Map ---
+function getCongestionTileUrl() {
+  return store.mapStyle === 'dark'
+    ? 'https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png'
+    : 'https://basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png'
+}
+
 function initMap() {
   if (!mapRef.value) return
 
@@ -262,15 +269,15 @@ function initMap() {
     style: {
       version: 8,
       sources: {
-        'carto-dark': {
+        'carto-tiles': {
           type: 'raster',
-          tiles: ['https://basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png'],
+          tiles: [getCongestionTileUrl()],
           tileSize: 256,
         },
       },
       glyphs: 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf',
       layers: [
-        { id: 'carto', type: 'raster', source: 'carto-dark', minzoom: 0, maxzoom: 19 },
+        { id: 'carto', type: 'raster', source: 'carto-tiles', minzoom: 0, maxzoom: 19 },
       ],
     },
     center: [126.63, 45.75],
@@ -780,6 +787,26 @@ watch(rankMode, () => {
 
 watch(selectedSegment, () => {
   nextTick(() => updateSparkline())
+})
+
+// Switch tile source when global map style changes
+watch(() => store.mapStyle, () => {
+  if (!map) return
+  map.setStyle({
+    version: 8,
+    sources: {
+      'carto-tiles': {
+        type: 'raster',
+        tiles: [getCongestionTileUrl()],
+        tileSize: 256,
+      },
+    },
+    glyphs: 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf',
+    layers: [
+      { id: 'carto', type: 'raster', source: 'carto-tiles', minzoom: 0, maxzoom: 19 },
+    ],
+  })
+  map.once('style.load', () => updateMap())
 })
 </script>
 
