@@ -7,9 +7,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -17,25 +16,18 @@ import java.util.*;
 public class DashboardServiceImpl implements DashboardService {
 
     private final JdbcTemplate jdbcTemplate;
-    private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     @Override
     public List<CatalogTableDTO> getCatalogTables() {
         String sql = """
             SELECT
-                'tdm' AS schema_name,
+                'ads' AS schema_name,
                 t.table_name,
-                COALESCE((SELECT nsp.nspname || '.' || cls.relname
-                         FROM pg_class cls
-                         JOIN pg_namespace nsp ON cls.relnamespace = nsp.oid
-                         WHERE cls.relname = t.table_name
-                         AND nsp.nspname = 'tdm'
-                         LIMIT 1), 'tdm.' || t.table_name) AS full_table_name,
                 COALESCE((SELECT COUNT(*) FROM information_schema.columns
-                         WHERE table_schema = 'tdm' AND table_name = t.table_name), 0) AS field_count,
-                COALESCE(pg_total_relation_size('tdm.' || t.table_name), 0) AS table_size_bytes
+                         WHERE table_schema = 'ads' AND table_name = t.table_name), 0) AS field_count,
+                COALESCE(pg_total_relation_size('ads.' || t.table_name), 0) AS table_size_bytes
             FROM information_schema.tables t
-            WHERE t.table_schema = 'tdm' AND t.table_type = 'BASE TABLE'
+            WHERE t.table_schema = 'ads' AND t.table_type = 'BASE TABLE'
             ORDER BY t.table_name
             """;
 
@@ -43,12 +35,12 @@ public class DashboardServiceImpl implements DashboardService {
             List<CatalogTableDTO> result = new ArrayList<>();
             while (rs.next()) {
                 String tableName = rs.getString("table_name");
-                String fullTable = rs.getString("full_table_name");
+                String fullTable = "ads." + tableName;
                 try {
                     Long rowCount = jdbcTemplate.queryForObject(
                             "SELECT COUNT(*) FROM " + fullTable, Long.class);
                     result.add(CatalogTableDTO.builder()
-                            .schema("tdm")
+                            .schema("ads")
                             .tableName(tableName)
                             .rowCount(rowCount)
                             .fieldCount(rs.getInt("field_count"))
@@ -67,7 +59,7 @@ public class DashboardServiceImpl implements DashboardService {
             throw new IllegalArgumentException("Invalid table name");
         }
 
-        String fullTable = "tdm." + tableName;
+        String fullTable = "ads." + tableName;
 
         String fieldSql = """
             SELECT
@@ -76,7 +68,7 @@ public class DashboardServiceImpl implements DashboardService {
                 is_nullable,
                 COALESCE(column_default, '') AS default_value
             FROM information_schema.columns
-            WHERE table_schema = 'tdm' AND table_name = ?
+            WHERE table_schema = 'ads' AND table_name = ?
             ORDER BY ordinal_position
             """;
 
@@ -101,37 +93,34 @@ public class DashboardServiceImpl implements DashboardService {
 
     @Override
     public QueryResponse queryCatalog(QueryRequest request) {
-        String tableName = request.getTableName();
-        if (!tableName.matches("^[a-z0-9_]+$")) {
-            throw new IllegalArgumentException("Invalid table name");
-        }
-
-        StringBuilder sql = new StringBuilder();
         List<String> columns;
         List<String> requestFields = request.getFields();
 
+        StringBuilder sql = new StringBuilder();
+        sql.append("SELECT ");
+
         if (requestFields == null || requestFields.isEmpty()) {
-            sql.append("SELECT * FROM tdm.").append(tableName);
-            columns = getTableColumns(tableName);
+            sql.append("* FROM ads.").append(request.getTableName());
+            columns = getTableColumns(request.getTableName());
         } else {
             columns = requestFields;
             sql.append("SELECT ");
-            sql.append(String.join(", ", columns));
-            sql.append(" FROM tdm.").append(tableName);
+            sql.append(String.join(", ", requestFields));
+            sql.append(" FROM ads.").append(request.getTableName());
         }
 
+        List<String> conditions = new ArrayList<>();
         if (request.getFilters() != null && !request.getFilters().isEmpty()) {
-            sql.append(" WHERE ");
-            List<String> conditions = new ArrayList<>();
             for (QueryRequest.FilterCondition filter : request.getFilters()) {
                 conditions.add(buildCondition(filter));
             }
+            sql.append(" WHERE ");
             sql.append(String.join(" AND ", conditions));
         }
 
         sql.append(" LIMIT ").append(Math.min(request.getLimit(), 1000));
 
-        String countSql = "SELECT COUNT(*) FROM tdm." + tableName;
+        String countSql = "SELECT COUNT(*) FROM ads." + request.getTableName();
         if (request.getFilters() != null && !request.getFilters().isEmpty()) {
             countSql += " WHERE ";
             List<String> conditions = new ArrayList<>();
@@ -141,23 +130,33 @@ public class DashboardServiceImpl implements DashboardService {
             countSql += String.join(" AND ", conditions);
         }
 
-        Long totalRows = jdbcTemplate.queryForObject(countSql, Long.class);
-
-        List<List<Object>> rows = jdbcTemplate.query(sql.toString(), (rs) -> {
-            List<List<Object>> result = new ArrayList<>();
-            while (rs.next()) {
-                List<Object> row = new ArrayList<>();
-                for (String col : columns) {
-                    row.add(rs.getObject(col));
+        Object[] params = new Object[request.getFilters() != null ? request.getFilters().size() + 1 : 0];
+        int paramIndex = 0;
+        if (request.getStartTime() != null) {
+            params[paramIndex++] = request.getStartTime();
+        }
+        if (request.getEndTime() != null) {
+            params[paramIndex++] = request.getEndTime();
+        }
+        if (request.getFilters() != null) {
+            for (QueryRequest.FilterCondition filter : request.getFilters()) {
+                Object value = filter.getValue();
+                if (value instanceof Double || value instanceof Integer) {
+                    params[paramIndex++] = value;
+                } else if (value instanceof String) {
+                    params[paramIndex++] = value;
                 }
-                result.add(row);
             }
-            return result;
-        });
+        }
+        params[params.length - 1] = request.getLimit();
+
+        Long totalRows = jdbcTemplate.queryForObject(countSql, Long.class, params);
+
+        List<List<Object>> rows = jdbcTemplate.query(sql.toString(), params);
 
         String queryId = "q_" + System.currentTimeMillis();
 
-        logQuery(tableName, columns, request.getFilters(), rows.size(), queryId);
+        logQuery(request.getTableName(), columns, request.getFilters(), rows.size(), queryId);
 
         return QueryResponse.builder()
                 .columns(columns)
@@ -189,7 +188,7 @@ public class DashboardServiceImpl implements DashboardService {
         String sql = """
             SELECT column_name
             FROM information_schema.columns
-            WHERE table_schema = 'tdm' AND table_name = ?
+            WHERE table_schema = 'ads' AND table_name = ?
             ORDER BY ordinal_position
             """;
         return jdbcTemplate.queryForList(sql, String.class, tableName);
@@ -201,11 +200,11 @@ public class DashboardServiceImpl implements DashboardService {
         try {
             String sql = """
                 INSERT INTO ads.data_field_access_log (query_id, table_name, field_name, query_time, row_count, user_id)
-                VALUES (?, ?, ?, ?, ?, 'dashboard_user')
+                VALUES (?, ?, ?, ?, 'dashboard_user')
                 """;
             for (String field : fields) {
                 jdbcTemplate.update(sql, queryId, tableName, field,
-                        LocalDateTime.now().format(FORMATTER), rowCount);
+                        java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")), rowCount);
             }
         } catch (Exception e) {
             log.warn("Failed to log query: {}", e.getMessage());
@@ -232,84 +231,118 @@ public class DashboardServiceImpl implements DashboardService {
                     .rank(rs.getInt("rank"))
                     .build());
         } catch (Exception e) {
-            log.warn("Failed to get hot fields, returning mock data: {}", e.getMessage());
-            return List.of(
-                    HotFieldDTO.builder().fieldName("road_segment_id").queryCount(15).rank(1).build(),
-                    HotFieldDTO.builder().fieldName("hour_of_day").queryCount(12).rank(2).build(),
-                    HotFieldDTO.builder().fieldName("day_type").queryCount(10).rank(3).build()
-            );
+            log.warn("Failed to get hot fields: {}", e.getMessage());
+            return List.of();
         }
     }
 
     @Override
     public LineageResponse getLineage() {
+        String sql = """
+            SELECT
+                vl.source_table || '.' || vl.source_schema AS source_id,
+                vl.target_table || '.' || vl.target_schema AS target_id,
+                vl.relationship_type,
+                vl.source_row_count,
+                vl.target_row_count
+            FROM ads.vw_data_lineage vl
+            ORDER BY vl.relationship_type
+            """;
+
+        List<Map<String, Object>> lineageRows = jdbcTemplate.queryForList(sql);
+
+        Set<String> allTables = new HashSet<>();
+        for (Map<String, Object> row : lineageRows) {
+            String source = (String) row.get("source_id");
+            String target = (String) row.get("target_id");
+            allTables.add(source);
+            allTables.add(target);
+        }
+
+        String tableSql = """
+            SELECT
+                schemaname || '.' || tablename AS full_name,
+                schemaname AS schema_name,
+                tablename AS table_name,
+                COALESCE((SELECT COUNT(*) FROM schemaname || '.' || tablename), 0) AS row_count
+            FROM information_schema.tables
+            WHERE (schemaname || '.' || tablename) IN (%s)
+            AND table_type = 'BASE TABLE'
+            ORDER BY schemaname, tablename
+            """.formatted(allTables.stream()
+                    .map(t -> "'" + t + "'")
+                    .collect(Collectors.join(", ")));
+
+        List<Map<String, Object>> tableRows = jdbcTemplate.queryForList(tableSql);
+
+        Map<String, Map<String, Object>> tableMap = tableRows.stream()
+                .collect(Collectors.toMap(
+                        row -> (String) row.get("full_name"),
+                        row -> row
+                ));
+
+        List<LineageNodeDTO> nodes = tableMap.entrySet().stream()
+                .map(entry -> {
+                    String schema = (String) entry.getValue().get("schema_name");
+                    String tableName = (String) entry.getValue().get("table_name");
+                    return LineageNodeDTO.builder()
+                            .id(tableName)
+                            .label(formatTableLabel(schema, tableName))
+                            .layer(getLayerName(schema))
+                            .rowCount(((Number) entry.getValue().get("row_count")).longValue())
+                            .build();
+                })
+                .collect(Collectors.toList());
+
+        List<LineageEdgeDTO> edges = lineageRows.stream()
+                .map(row -> {
+                    String source = extractTableName((String) row.get("source_id"));
+                    String target = extractTableName((String) row.get("target_id"));
+                    return LineageEdgeDTO.builder()
+                            .source(source)
+                            .target(target)
+                            .label((String) row.get("relationship_type"))
+                            .build();
+                })
+                .collect(Collectors.toList());
+
         return LineageResponse.builder()
-                .nodes(List.of(
-                        LineageNodeDTO.builder()
-                                .id("ods_taxi_trips_raw")
-                                .label("出租车原始轨迹")
-                                .layer("ODS")
-                                .rowCount(1340000L)
-                                .build(),
-                        LineageNodeDTO.builder()
-                                .id("fact_congestion_seg_hour")
-                                .label("拥堵小时事实")
-                                .layer("DW")
-                                .rowCount(1340958L)
-                                .build(),
-                        LineageNodeDTO.builder()
-                                .id("congestion_baseline_5day")
-                                .label("拥堵基线5天")
-                                .layer("TDM")
-                                .rowCount(834170L)
-                                .build(),
-                        LineageNodeDTO.builder()
-                                .id("ads_congestion_by_segment_hour")
-                                .label("拥堵路段展示")
-                                .layer("ADS")
-                                .rowCount(null)
-                                .build(),
-                        LineageNodeDTO.builder()
-                                .id("driver_shift_pattern")
-                                .label("司机排班模式")
-                                .layer("TDM")
-                                .rowCount(55251L)
-                                .build(),
-                        LineageNodeDTO.builder()
-                                .id("grid_hotspot_score")
-                                .label("网格热点评分")
-                                .layer("TDM")
-                                .rowCount(187877L)
-                                .build()
-                ))
-                .edges(List.of(
-                        LineageEdgeDTO.builder()
-                                .source("ods_taxi_trips_raw")
-                                .target("fact_congestion_seg_hour")
-                                .label("ETL聚合")
-                                .build(),
-                        LineageEdgeDTO.builder()
-                                .source("fact_congestion_seg_hour")
-                                .target("congestion_baseline_5day")
-                                .label("5天滑动窗口")
-                                .build(),
-                        LineageEdgeDTO.builder()
-                                .source("congestion_baseline_5day")
-                                .target("ads_congestion_by_segment_hour")
-                                .label("指标增强")
-                                .build(),
-                        LineageEdgeDTO.builder()
-                                .source("ods_taxi_trips_raw")
-                                .target("driver_shift_pattern")
-                                .label("模式识别")
-                                .build(),
-                        LineageEdgeDTO.builder()
-                                .source("ods_taxi_trips_raw")
-                                .target("grid_hotspot_score")
-                                .label("空间聚合")
-                                .build()
-                ))
+                .nodes(nodes)
+                .edges(edges)
                 .build();
+    }
+
+    private String extractTableName(String fullId) {
+        return fullId.contains(".") ? fullId.substring(fullId.lastIndexOf(".") + 1) : fullId;
+    }
+
+    private String getLayerName(String schema) {
+        return switch (schema) {
+            case "ods" -> "ODS";
+            case "dw" -> "DW";
+            case "tdm" -> "TDM";
+            case "ads" -> "ADS";
+            default -> schema.toUpperCase();
+        };
+    }
+
+    private String formatTableLabel(String schema, String table) {
+        return switch (schema) {
+            case "ods" -> table.contains("trip") ? "GPS行程记录" : "原始数据";
+            case "dw" -> "事实数据";
+            case "tdm" -> getTdmLabel(table);
+            case "ads" -> "大屏展示数据";
+            default -> table;
+        };
+    }
+
+    private String getTdmLabel(String table) {
+        return switch (table) {
+            case "congestion_baseline_5day" -> "拥堵基线指标";
+            case "driver_shift_pattern" -> "司机班次特征";
+            case "grid_hotspot_score" -> "热点区域评分";
+            default -> table;
+        };
     }
 
     @Override
