@@ -11,4 +11,5 @@ public interface DashboardService {
     List<HotFieldDTO> getHotFields();
     LineageResponse getLineage();
     QualityResponse getQuality();
+    TrajectoryResponse getTrajectory(TrajectoryRequest request);
 }

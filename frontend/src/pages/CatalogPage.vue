@@ -14,7 +14,7 @@
     </div>
 
     <div class="catalog-layout">
-      <!-- 左侧：表列表 -->
+      <!-- 左栏：表列表 -->
       <div class="table-list-section">
         <div class="section-header">
           <h3>TDM 数据表</h3>
@@ -28,7 +28,7 @@
             :class="{ active: store.selectedTable?.tableName === table.tableName }"
             @click="selectTable(table)"
           >
-            <div class="table-icon">📊</div>
+            <div class="table-icon">表</div>
             <div class="table-info">
               <div class="table-name">{{ table.tableName }}</div>
               <div class="table-meta">
@@ -44,12 +44,9 @@
         <div v-if="store.selectedTable" class="detail-content">
           <div class="detail-header">
             <h3>{{ store.selectedTable.tableName }}</h3>
-            <button class="btn btn-query" @click="openQueryModal">
-              查询数据
-            </button>
+            <button type="button" class="btn btn-query" @click="openQueryModal">查询数据</button>
           </div>
 
-          <!-- 字段列表 -->
           <div class="fields-section">
             <h4>字段信息</h4>
             <div class="fields-table">
@@ -59,7 +56,7 @@
                     <th>字段名</th>
                     <th>类型</th>
                     <th>可空</th>
-                    <th>描述</th>
+                    <th>备注</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -78,9 +75,8 @@
             </div>
           </div>
 
-          <!-- 数据预览 -->
           <div class="preview-section">
-            <h4>数据预览（前5行）</h4>
+            <h4>数据预览（前 5 行）</h4>
             <div class="preview-table">
               <table>
                 <thead>
@@ -99,53 +95,47 @@
         </div>
 
         <div v-else class="empty-state">
-          <div class="empty-icon">📋</div>
-          <p>请从左侧选择一个数据表</p>
+          <div class="empty-icon">目</div>
+          <p>请从左侧选择一张数据表</p>
         </div>
       </div>
     </div>
 
-    <!-- 查询模态框 -->
     <div v-if="showQueryModal" class="modal-overlay" @click="closeQueryModal">
       <div class="modal-content" @click.stop>
         <div class="modal-header">
           <h3>数据查询</h3>
-          <button class="modal-close" @click="closeQueryModal">✕</button>
+          <button type="button" class="modal-close" @click="closeQueryModal">关闭</button>
         </div>
         <div class="modal-body">
           <div class="form-group">
             <label>选择字段</label>
             <div class="field-checkboxes">
               <label v-for="field in fields" :key="field.name" class="checkbox-item">
-                <input
-                  v-model="selectedFields"
-                  type="checkbox"
-                  :value="field.name"
-                />
+                <input v-model="selectedFields" type="checkbox" :value="field.name" />
                 {{ field.name }}
               </label>
             </div>
           </div>
           <div class="form-group">
-            <label>行数限制</label>
+            <label>限制行数</label>
             <input v-model.number="queryLimit" type="number" min="1" max="1000" class="form-input" />
           </div>
         </div>
         <div class="modal-footer">
-          <button class="btn btn-cancel" @click="closeQueryModal">取消</button>
-          <button class="btn btn-primary" @click="executeQuery" :disabled="querying">
+          <button type="button" class="btn btn-cancel" @click="closeQueryModal">取消</button>
+          <button type="button" class="btn btn-primary" @click="executeQuery" :disabled="querying">
             {{ querying ? '查询中...' : '执行查询' }}
           </button>
         </div>
       </div>
     </div>
 
-    <!-- 查询结果模态框 -->
     <div v-if="showResultModal" class="modal-overlay" @click="closeResultModal">
       <div class="modal-content large" @click.stop>
         <div class="modal-header">
-          <h3>查询结果 ({{ queryResult?.totalRows || 0 }} 行)</h3>
-          <button class="modal-close" @click="closeResultModal">✕</button>
+          <h3>查询结果（共 {{ queryResult?.totalRows || 0 }} 行）</h3>
+          <button type="button" class="modal-close" @click="closeResultModal">关闭</button>
         </div>
         <div class="modal-body">
           <div class="result-table">
@@ -164,12 +154,11 @@
           </div>
         </div>
         <div class="modal-footer">
-          <button class="btn btn-primary" @click="closeResultModal">关闭</button>
+          <button type="button" class="btn btn-primary" @click="closeResultModal">关闭</button>
         </div>
       </div>
     </div>
 
-    <!-- 热度排行榜 -->
     <div class="hot-fields-section">
       <h3>字段热度排行</h3>
       <div class="hot-fields-list">
@@ -184,7 +173,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useDashboardStore } from '@/stores/dashboardStore'
 import { dashboardApi } from '@/services/dashboardApi'
 
@@ -221,9 +210,7 @@ async function loadTables() {
 
 function filterTables() {
   const keyword = store.catalogKeyword.toLowerCase()
-  filteredTables.value = tables.value.filter(t =>
-    t.tableName.toLowerCase().includes(keyword)
-  )
+  filteredTables.value = tables.value.filter((t) => t.tableName.toLowerCase().includes(keyword))
 }
 
 async function selectTable(table) {
@@ -253,7 +240,7 @@ async function loadHotFields() {
 }
 
 function openQueryModal() {
-  selectedFields.value = fields.value.slice(0, 5).map(f => f.name)
+  selectedFields.value = fields.value.slice(0, 5).map((f) => f.name)
   queryLimit.value = 20
   showQueryModal.value = true
 }
@@ -268,7 +255,7 @@ async function executeQuery() {
     queryResult.value = await dashboardApi.queryCatalog({
       tableName: store.selectedTable.tableName,
       fields: selectedFields.value,
-      limit: queryLimit.value
+      limit: queryLimit.value,
     })
     showQueryModal.value = false
     showResultModal.value = true
@@ -402,7 +389,16 @@ function formatValue(val) {
 }
 
 .table-icon {
-  font-size: 18px;
+  font-size: 14px;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  background: rgba(0, 204, 255, 0.15);
+  color: #0cf;
+  font-weight: 600;
 }
 
 .table-info {
@@ -541,7 +537,6 @@ td {
   margin-bottom: 16px;
 }
 
-/* Modal */
 .modal-overlay {
   position: fixed;
   top: 0;
@@ -589,7 +584,7 @@ td {
   background: none;
   border: none;
   color: rgba(255, 255, 255, 0.5);
-  font-size: 18px;
+  font-size: 14px;
   cursor: pointer;
 }
 

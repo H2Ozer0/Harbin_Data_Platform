@@ -12,26 +12,22 @@ import java.util.List;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class QueryRequest {
+public class TrajectoryRequest {
     @NotNull
-    private String tableName;
+    private String startTime;
 
-    private List<String> fields;
+    @NotNull
+    private String endTime;
 
-    private List<FilterCondition> filters;
+    private String deviceId;
 
     @Min(1)
     @Max(1000)
     @Builder.Default
     private Integer limit = 100;
 
-    @Data
-    @Builder
-    @NoArgsConstructor
-    @AllArgsConstructor
-    public static class FilterCondition {
-        private String field;
-        private String operator;
-        private Object value;
-    }
+    private Double minLon;
+    private Double maxLon;
+    private Double minLat;
+    private Double maxLat;
 }

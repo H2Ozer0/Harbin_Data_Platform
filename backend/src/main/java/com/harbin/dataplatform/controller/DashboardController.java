@@ -12,6 +12,7 @@ import java.util.List;
 @RestController
 @RequestMapping("/dashboard")
 @RequiredArgsConstructor
+@CrossOrigin
 public class DashboardController {
 
     private final DashboardService dashboardService;
@@ -46,5 +47,28 @@ public class DashboardController {
     @GetMapping("/quality")
     public ResponseEntity<QualityResponse> getQuality() {
         return ResponseEntity.ok(dashboardService.getQuality());
+    }
+
+    @GetMapping("/trajectory")
+    public ResponseEntity<TrajectoryResponse> getTrajectory(
+            @RequestParam String startTime,
+            @RequestParam String endTime,
+            @RequestParam(required = false) String deviceId,
+            @RequestParam(required = false, defaultValue = "100") Integer limit,
+            @RequestParam(required = false) Double minLon,
+            @RequestParam(required = false) Double maxLon,
+            @RequestParam(required = false) Double minLat,
+            @RequestParam(required = false) Double maxLat) {
+        TrajectoryRequest request = TrajectoryRequest.builder()
+                .startTime(startTime)
+                .endTime(endTime)
+                .deviceId(deviceId)
+                .limit(limit)
+                .minLon(minLon)
+                .maxLon(maxLon)
+                .minLat(minLat)
+                .maxLat(maxLat)
+                .build();
+        return ResponseEntity.ok(dashboardService.getTrajectory(request));
     }
 }

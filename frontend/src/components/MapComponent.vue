@@ -10,14 +10,14 @@
       </div>
     </div>
     <div class="map-controls" v-if="showControls">
-      <button class="control-btn" @click="resetView">
-        <span>⟲</span>
+      <button type="button" class="control-btn" title="复位" @click="resetView">
+        <span>复位</span>
       </button>
-      <button class="control-btn" @click="zoomIn">
+      <button type="button" class="control-btn" title="放大" @click="zoomIn">
         <span>+</span>
       </button>
-      <button class="control-btn" @click="zoomOut">
-        <span>−</span>
+      <button type="button" class="control-btn" title="缩小" @click="zoomOut">
+        <span>-</span>
       </button>
     </div>
   </div>
@@ -30,7 +30,7 @@ const props = defineProps({
   showLegend: { type: Boolean, default: true },
   showControls: { type: Boolean, default: true },
   legendTitle: { type: String, default: '图例' },
-  legendItems: { type: Array, default: () => [] }
+  legendItems: { type: Array, default: () => [] },
 })
 
 const mapContainer = ref(null)
@@ -48,12 +48,9 @@ onUnmounted(() => {
 })
 
 function initMap() {
-  // 简化版地图容器 - 实际项目可以使用 Mapbox GL
   const container = mapContainer.value
   if (!container) return
 
-  // 初始化地图
-  // 这里是简化实现，实际应使用 Mapbox GL 加载 OSM 数据
   console.log('Map initialized, OSM file: harbin.osm.pbf')
 }
 
@@ -61,7 +58,7 @@ function resetView() {
   if (map && map.flyTo) {
     map.flyTo({
       center: [126.65, 45.75],
-      zoom: 10
+      zoom: 10,
     })
   }
 }
@@ -78,12 +75,11 @@ function zoomOut() {
   }
 }
 
-// 暴露方法供父组件调用
 defineExpose({
   resetView,
   zoomIn,
   zoomOut,
-  getMap: () => map
+  getMap: () => map,
 })
 </script>
 

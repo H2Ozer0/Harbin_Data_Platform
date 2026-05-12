@@ -2,11 +2,14 @@ package com.harbin.dataplatform.service.impl;
 
 import com.harbin.dataplatform.dto.*;
 import com.harbin.dataplatform.service.DashboardService;
+import com.harbin.dataplatform.service.TaxiService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -15,7 +18,11 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class DashboardServiceImpl implements DashboardService {
 
+    private static final DateTimeFormatter TRAJECTORY_TIME =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
+
     private final JdbcTemplate jdbcTemplate;
+    private final TaxiService taxiService;
 
     @Override
     public List<CatalogTableDTO> getCatalogTables() {
@@ -93,69 +100,42 @@ public class DashboardServiceImpl implements DashboardService {
 
     @Override
     public QueryResponse queryCatalog(QueryRequest request) {
+        if (!request.getTableName().matches("^[a-z0-9_]+$")) {
+            throw new IllegalArgumentException("Invalid table name");
+        }
+
+        int limit = Math.min(request.getLimit() != null ? request.getLimit() : 100, 1000);
         List<String> columns;
+        StringBuilder sql = new StringBuilder("SELECT ");
+
         List<String> requestFields = request.getFields();
-
-        StringBuilder sql = new StringBuilder();
-        sql.append("SELECT ");
-
         if (requestFields == null || requestFields.isEmpty()) {
             sql.append("* FROM ads.").append(request.getTableName());
             columns = getTableColumns(request.getTableName());
         } else {
             columns = requestFields;
-            sql.append("SELECT ");
-            sql.append(String.join(", ", requestFields));
-            sql.append(" FROM ads.").append(request.getTableName());
+            sql.append(String.join(", ", requestFields)).append(" FROM ads.").append(request.getTableName());
         }
 
-        List<String> conditions = new ArrayList<>();
         if (request.getFilters() != null && !request.getFilters().isEmpty()) {
-            for (QueryRequest.FilterCondition filter : request.getFilters()) {
-                conditions.add(buildCondition(filter));
-            }
             sql.append(" WHERE ");
-            sql.append(String.join(" AND ", conditions));
+            sql.append(request.getFilters().stream().map(this::buildCondition).collect(Collectors.joining(" AND ")));
         }
+        sql.append(" LIMIT ").append(limit);
 
-        sql.append(" LIMIT ").append(Math.min(request.getLimit(), 1000));
+        List<Map<String, Object>> maps = jdbcTemplate.queryForList(sql.toString());
+        List<List<Object>> rows = maps.stream()
+                .map(m -> columns.stream().map(m::get).toList())
+                .toList();
 
-        String countSql = "SELECT COUNT(*) FROM ads." + request.getTableName();
+        StringBuilder countSql = new StringBuilder("SELECT COUNT(*) FROM ads.").append(request.getTableName());
         if (request.getFilters() != null && !request.getFilters().isEmpty()) {
-            countSql += " WHERE ";
-            List<String> conditions = new ArrayList<>();
-            for (QueryRequest.FilterCondition filter : request.getFilters()) {
-                conditions.add(buildCondition(filter));
-            }
-            countSql += String.join(" AND ", conditions);
+            countSql.append(" WHERE ");
+            countSql.append(request.getFilters().stream().map(this::buildCondition).collect(Collectors.joining(" AND ")));
         }
-
-        Object[] params = new Object[request.getFilters() != null ? request.getFilters().size() + 1 : 0];
-        int paramIndex = 0;
-        if (request.getStartTime() != null) {
-            params[paramIndex++] = request.getStartTime();
-        }
-        if (request.getEndTime() != null) {
-            params[paramIndex++] = request.getEndTime();
-        }
-        if (request.getFilters() != null) {
-            for (QueryRequest.FilterCondition filter : request.getFilters()) {
-                Object value = filter.getValue();
-                if (value instanceof Double || value instanceof Integer) {
-                    params[paramIndex++] = value;
-                } else if (value instanceof String) {
-                    params[paramIndex++] = value;
-                }
-            }
-        }
-        params[params.length - 1] = request.getLimit();
-
-        Long totalRows = jdbcTemplate.queryForObject(countSql, Long.class, params);
-
-        List<List<Object>> rows = jdbcTemplate.query(sql.toString(), params);
+        Long totalRows = jdbcTemplate.queryForObject(countSql.toString(), Long.class);
 
         String queryId = "q_" + System.currentTimeMillis();
-
         logQuery(request.getTableName(), columns, request.getFilters(), rows.size(), queryId);
 
         return QueryResponse.builder()
@@ -164,6 +144,21 @@ public class DashboardServiceImpl implements DashboardService {
                 .totalRows(totalRows)
                 .queryId(queryId)
                 .build();
+    }
+
+    @Override
+    public TrajectoryResponse getTrajectory(TrajectoryRequest request) {
+        LocalDateTime start = LocalDateTime.parse(request.getStartTime(), TRAJECTORY_TIME);
+        LocalDateTime end = LocalDateTime.parse(request.getEndTime(), TRAJECTORY_TIME);
+        int cap = request.getLimit() != null ? request.getLimit() : 100;
+        List<TrajectorySliceDTO> points = taxiService.getTrajectorySlice(
+                start, end,
+                request.getMinLon(), request.getMaxLon(), request.getMinLat(), request.getMaxLat()
+        );
+        if (points.size() > cap) {
+            points = new ArrayList<>(points.subList(0, cap));
+        }
+        return TrajectoryResponse.builder().points(points).build();
     }
 
     private String buildCondition(QueryRequest.FilterCondition filter) {
@@ -238,72 +233,71 @@ public class DashboardServiceImpl implements DashboardService {
 
     @Override
     public LineageResponse getLineage() {
-        String sql = """
-            SELECT
-                vl.source_table || '.' || vl.source_schema AS source_id,
-                vl.target_table || '.' || vl.target_schema AS target_id,
-                vl.relationship_type,
-                vl.source_row_count,
-                vl.target_row_count
-            FROM ads.vw_data_lineage vl
-            ORDER BY vl.relationship_type
-            """;
-
-        List<Map<String, Object>> lineageRows = jdbcTemplate.queryForList(sql);
-
-        Set<String> allTables = new HashSet<>();
-        for (Map<String, Object> row : lineageRows) {
-            String source = (String) row.get("source_id");
-            String target = (String) row.get("target_id");
-            allTables.add(source);
-            allTables.add(target);
+        // 1. 尝试从 ads.data_lineage 查询，若表不存在则使用内置血缘数据
+        List<Map<String, Object>> lineageRows;
+        try {
+            String lineageSql = """
+                SELECT source_schema, source_table, target_schema, target_table, relationship_type
+                FROM ads.data_lineage
+                ORDER BY source_schema, source_table, target_schema, target_table
+                """;
+            lineageRows = jdbcTemplate.queryForList(lineageSql);
+        } catch (Exception e) {
+            log.warn("ads.data_lineage not available, using built-in lineage: {}", e.getMessage());
+            lineageRows = List.of();
         }
 
-        String tableSql = """
-            SELECT
-                schemaname || '.' || tablename AS full_name,
-                schemaname AS schema_name,
-                tablename AS table_name,
-                COALESCE((SELECT COUNT(*) FROM schemaname || '.' || tablename), 0) AS row_count
-            FROM information_schema.tables
-            WHERE (schemaname || '.' || tablename) IN (%s)
-            AND table_type = 'BASE TABLE'
-            ORDER BY schemaname, tablename
-            """.formatted(allTables.stream()
-                    .map(t -> "'" + t + "'")
-                    .collect(Collectors.join(", ")));
+        // 如果 DB 无数据，使用内置血缘关系
+        if (lineageRows.isEmpty()) {
+            lineageRows = buildBuiltinLineage();
+        }
 
-        List<Map<String, Object>> tableRows = jdbcTemplate.queryForList(tableSql);
+        // 2. 收集所有涉及的 schema.table
+        Set<String> allTables = new LinkedHashSet<>();
+        for (Map<String, Object> row : lineageRows) {
+            allTables.add(row.get("source_schema") + "." + row.get("source_table"));
+            allTables.add(row.get("target_schema") + "." + row.get("target_table"));
+        }
 
-        Map<String, Map<String, Object>> tableMap = tableRows.stream()
-                .collect(Collectors.toMap(
-                        row -> (String) row.get("full_name"),
-                        row -> row
-                ));
+        // 3. 为每张表查元数据
+        List<LineageNodeDTO> nodes = new ArrayList<>();
+        for (String fullTable : allTables) {
+            String[] parts = fullTable.split("\\.");
+            String schema = parts[0];
+            String table = parts[1];
 
-        List<LineageNodeDTO> nodes = tableMap.entrySet().stream()
-                .map(entry -> {
-                    String schema = (String) entry.getValue().get("schema_name");
-                    String tableName = (String) entry.getValue().get("table_name");
-                    return LineageNodeDTO.builder()
-                            .id(tableName)
-                            .label(formatTableLabel(schema, tableName))
-                            .layer(getLayerName(schema))
-                            .rowCount(((Number) entry.getValue().get("row_count")).longValue())
-                            .build();
-                })
-                .collect(Collectors.toList());
+            long rowCount = 0;
+            int fieldCount = 0;
+            try {
+                rowCount = jdbcTemplate.queryForObject(
+                        "SELECT COUNT(*) FROM " + schema + "." + table, Long.class);
+            } catch (Exception e) {
+                log.warn("Cannot count rows for {}.{}: {}", schema, table, e.getMessage());
+            }
+            try {
+                fieldCount = jdbcTemplate.queryForObject(
+                        "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=? AND table_name=?",
+                        Integer.class, schema, table);
+            } catch (Exception e) {
+                log.warn("Cannot count fields for {}.{}: {}", schema, table, e.getMessage());
+            }
 
+            nodes.add(LineageNodeDTO.builder()
+                    .id(table)
+                    .label(formatTableLabel(schema, table))
+                    .layer(getLayerName(schema))
+                    .rowCount(rowCount)
+                    .fieldCount(fieldCount)
+                    .build());
+        }
+
+        // 4. 构建边
         List<LineageEdgeDTO> edges = lineageRows.stream()
-                .map(row -> {
-                    String source = extractTableName((String) row.get("source_id"));
-                    String target = extractTableName((String) row.get("target_id"));
-                    return LineageEdgeDTO.builder()
-                            .source(source)
-                            .target(target)
-                            .label((String) row.get("relationship_type"))
-                            .build();
-                })
+                .map(row -> LineageEdgeDTO.builder()
+                        .source((String) row.get("source_table"))
+                        .target((String) row.get("target_table"))
+                        .label((String) row.get("relationship_type"))
+                        .build())
                 .collect(Collectors.toList());
 
         return LineageResponse.builder()
@@ -312,8 +306,25 @@ public class DashboardServiceImpl implements DashboardService {
                 .build();
     }
 
-    private String extractTableName(String fullId) {
-        return fullId.contains(".") ? fullId.substring(fullId.lastIndexOf(".") + 1) : fullId;
+    private List<Map<String, Object>> buildBuiltinLineage() {
+        String[][] rels = {
+                {"ods", "ods_taxi_trips_raw", "dw", "fact_congestion_seg_hour", "ETL聚合"},
+                {"ods", "ods_taxi_trips_raw", "tdm", "driver_shift_pattern", "模式识别"},
+                {"ods", "ods_taxi_trips_raw", "tdm", "grid_hotspot_score", "空间聚合"},
+                {"dw", "fact_congestion_seg_hour", "tdm", "congestion_baseline_5day", "5天滑动窗口"},
+                {"tdm", "congestion_baseline_5day", "ads", "congestion_by_segment_hour", "指标增强"},
+        };
+        List<Map<String, Object>> rows = new ArrayList<>();
+        for (String[] r : rels) {
+            Map<String, Object> map = new LinkedHashMap<>();
+            map.put("source_schema", r[0]);
+            map.put("source_table", r[1]);
+            map.put("target_schema", r[2]);
+            map.put("target_table", r[3]);
+            map.put("relationship_type", r[4]);
+            rows.add(map);
+        }
+        return rows;
     }
 
     private String getLayerName(String schema) {
@@ -329,9 +340,9 @@ public class DashboardServiceImpl implements DashboardService {
     private String formatTableLabel(String schema, String table) {
         return switch (schema) {
             case "ods" -> table.contains("trip") ? "GPS行程记录" : "原始数据";
-            case "dw" -> "事实数据";
+            case "dw" -> "拥堵事实表";
             case "tdm" -> getTdmLabel(table);
-            case "ads" -> "大屏展示数据";
+            case "ads" -> "应用展示数据";
             default -> table;
         };
     }
@@ -339,53 +350,66 @@ public class DashboardServiceImpl implements DashboardService {
     private String getTdmLabel(String table) {
         return switch (table) {
             case "congestion_baseline_5day" -> "拥堵基线指标";
-            case "driver_shift_pattern" -> "司机班次特征";
-            case "grid_hotspot_score" -> "热点区域评分";
+            case "driver_shift_pattern" -> "司机排班模式";
+            case "grid_hotspot_score" -> "热点网格评分";
             default -> table;
         };
     }
 
     @Override
     public QualityResponse getQuality() {
-        return QualityResponse.builder()
-                .tables(List.of(
-                        DataQualityDTO.builder()
-                                .tableName("ods_taxi_trips_raw")
-                                .schema("ods")
-                                .rowCount(1340000L)
-                                .fieldCount(8)
-                                .lastUpdated("2025-01-01T00:00:00")
-                                .completenessPct(98.5)
-                                .status("healthy")
-                                .build(),
-                        DataQualityDTO.builder()
-                                .tableName("congestion_baseline_5day")
-                                .schema("tdm")
-                                .rowCount(834170L)
-                                .fieldCount(8)
-                                .lastUpdated("2025-01-01T00:00:00")
-                                .completenessPct(94.4)
-                                .status("healthy")
-                                .build(),
-                        DataQualityDTO.builder()
-                                .tableName("driver_shift_pattern")
-                                .schema("tdm")
-                                .rowCount(55251L)
-                                .fieldCount(15)
-                                .lastUpdated("2025-01-01T00:00:00")
-                                .completenessPct(96.2)
-                                .status("healthy")
-                                .build(),
-                        DataQualityDTO.builder()
-                                .tableName("grid_hotspot_score")
-                                .schema("tdm")
-                                .rowCount(187877L)
-                                .fieldCount(7)
-                                .lastUpdated("2025-01-01T00:00:00")
-                                .completenessPct(92.8)
-                                .status("warning")
-                                .build()
-                ))
-                .build();
+        // 动态查询各层核心表的质量信息
+        List<DataQualityDTO> tables = new ArrayList<>();
+
+        String[][] targets = {
+                {"ods", "ods_taxi_trips_raw"},
+                {"dw", "fact_congestion_seg_hour"},
+                {"tdm", "congestion_baseline_5day"},
+                {"tdm", "driver_shift_pattern"},
+                {"tdm", "grid_hotspot_score"},
+                {"ads", "ads_congestion_by_segment_hour"},
+        };
+
+        for (String[] t : targets) {
+            String schema = t[0];
+            String table = t[1];
+            try {
+                Long rowCount = jdbcTemplate.queryForObject(
+                        "SELECT COUNT(*) FROM " + schema + "." + table, Long.class);
+                Integer fieldCount = jdbcTemplate.queryForObject(
+                        "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=? AND table_name=?",
+                        Integer.class, schema, table);
+
+                // 计算完整度：取非 NULL 行占比（抽样第一列）
+                String firstCol = jdbcTemplate.queryForObject(
+                        "SELECT column_name FROM information_schema.columns WHERE table_schema=? AND table_name=? ORDER BY ordinal_position LIMIT 1",
+                        String.class, schema, table);
+                Double completeness = 100.0;
+                try {
+                    long nonNull = jdbcTemplate.queryForObject(
+                            "SELECT COUNT(*) FROM " + schema + "." + table + " WHERE \"" + firstCol + "\" IS NOT NULL",
+                            Long.class);
+                    if (rowCount != null && rowCount > 0) {
+                        completeness = Math.round(nonNull * 10000.0 / rowCount) / 100.0;
+                    }
+                } catch (Exception ignored) {}
+
+                String status = completeness >= 95 ? "healthy" : completeness >= 90 ? "warning" : "error";
+
+                tables.add(DataQualityDTO.builder()
+                        .tableName(table)
+                        .schema(schema)
+                        .rowCount(rowCount != null ? rowCount : 0L)
+                        .fieldCount(fieldCount != null ? fieldCount : 0)
+                        .lastUpdated("2025-01-01T00:00:00")
+                        .completenessPct(completeness)
+                        .status(status)
+                        .build());
+            } catch (Exception e) {
+                log.warn("Cannot get quality for {}.{}: {}", schema, table, e.getMessage());
+            }
+        }
+
+        return QualityResponse.builder().tables(tables).build();
     }
 }

@@ -5,14 +5,12 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.List;
+
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class LineageNodeDTO {
-    private String id;
-    private String label;
-    private String layer;
-    private Long rowCount;
-    private Integer fieldCount;
+public class TrajectoryResponse {
+    private List<TrajectorySliceDTO> points;
 }

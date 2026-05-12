@@ -19,39 +19,23 @@ INSERT INTO ads.data_lineage (source_table, source_schema, target_table, target_
 VALUES
 -- ODS -> DW
 ('ods_taxi_trips_raw', 'ods', 'fact_congestion_seg_hour', 'dw', 'ETL聚合'),
+-- ODS -> TDM
 ('ods_taxi_trips_raw', 'ods', 'driver_shift_pattern', 'tdm', '模式识别'),
 ('ods_taxi_trips_raw', 'ods', 'grid_hotspot_score', 'tdm', '空间聚合'),
-
 -- DW -> TDM
 ('fact_congestion_seg_hour', 'dw', 'congestion_baseline_5day', 'tdm', '5天滑动窗口'),
-
 -- TDM -> ADS
 ('congestion_baseline_5day', 'tdm', 'ads_congestion_by_segment_hour', 'ads', '指标增强')
 ON CONFLICT DO NOTHING;
 
--- 查询血缘关系的视图（包含表元数据）
+-- 查询血缘关系的视图（包含关系类型，行数由后端动态查询）
 CREATE OR REPLACE VIEW ads.vw_data_lineage AS
 SELECT
-    sl.source_table || '.' || sl.source_schema AS source_id,
-    sl.target_table || '.' || sl.target_schema AS target_id,
-    sl.relationship_type,
-    COALESCE(t1.row_count, 0) AS source_row_count,
-    COALESCE(t2.row_count, 0) AS target_row_count
+    sl.source_schema || '.' || sl.source_table AS source_id,
+    sl.target_schema || '.' || sl.target_table AS target_id,
+    sl.relationship_type
 FROM ads.data_lineage sl
-LEFT JOIN (
-    SELECT
-        schemaname || '.' || tablename AS full_name,
-        (SELECT COUNT(*) FROM schemaname || '.' || tablename) AS row_count
-    FROM information_schema.tables
-    WHERE table_type = 'BASE TABLE'
-) t1 ON sl.source_schema || '.' || sl.source_table = t1.full_name
-LEFT JOIN (
-    SELECT
-        schemaname || '.' || tablename AS full_name,
-        (SELECT COUNT(*) FROM schemaname || '.' || tablename) AS row_count
-    FROM information_schema.tables
-    WHERE table_type = 'BASE TABLE'
-) t2 ON sl.target_schema || '.' || sl.target_table = t2.full_name;
+ORDER BY sl.source_schema, sl.source_table;
 
 -- 创建字段访问日志表（用于热度统计）
 CREATE TABLE IF NOT EXISTS ads.data_field_access_log (

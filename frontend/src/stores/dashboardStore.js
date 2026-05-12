@@ -2,22 +2,21 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 
 export const useDashboardStore = defineStore('dashboard', () => {
-  // 全局时间状态（所有页面共用）
+  /** 全局时间状态（跨页面共享） */
   const selectedDate = ref('2015-01-05')
   const selectedHour = ref(12)
-  const selectedDayType = ref('workday')  // workday/weekend/holiday
+  const selectedDayType = ref('workday') // workday / weekend / holiday
 
-  // Catalog 页面状态
+  /** Catalog 页面状态 */
   const catalogKeyword = ref('')
   const selectedTable = ref(null)
 
-  // Lineage 页面状态
-  const selectedLayer = ref('all')  // all/ODS/DW/TDM/ADS
+  /** Lineage 页面状态 */
+  const selectedLayer = ref('all') // all / ODS / DW / TDM / ADS
 
-  // 加载状态
   const loading = ref(false)
 
-  // 计算属性：日期范围（用于趋势图表）
+  /** 日期范围（前后两天，用于过滤） */
   const dateRange = computed(() => {
     const start = new Date(selectedDate.value)
     start.setDate(start.getDate() - 2)
@@ -26,11 +25,10 @@ export const useDashboardStore = defineStore('dashboard', () => {
 
     return {
       start: start.toISOString().split('T')[0],
-      end: end.toISOString().split('T')[0]
+      end: end.toISOString().split('T')[0],
     }
   })
 
-  // Actions
   function setDate(date) {
     selectedDate.value = date
   }
@@ -56,7 +54,6 @@ export const useDashboardStore = defineStore('dashboard', () => {
   }
 
   return {
-    // State
     selectedDate,
     selectedHour,
     selectedDayType,
@@ -64,16 +61,12 @@ export const useDashboardStore = defineStore('dashboard', () => {
     selectedTable,
     selectedLayer,
     loading,
-
-    // Computed
     dateRange,
-
-    // Actions
     setDate,
     setHour,
     setDayType,
     setCatalogKeyword,
     setSelectedTable,
-    setLoading
+    setLoading,
   }
 })
