@@ -131,29 +131,16 @@ function initMap() {
     container: containerRef.value,
     style: {
       version: 8,
-      name: 'Dark',
       sources: {
-        'osm-tiles': {
+        'carto-dark': {
           type: 'raster',
-          tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+          tiles: ['https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png'],
           tileSize: 256,
-          attribution: '? OpenStreetMap contributors',
         },
       },
       glyphs: 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf',
       layers: [
-        {
-          id: 'background',
-          type: 'background',
-          paint: { 'background-color': '#0a0e1a' },
-        },
-        {
-          id: 'osm-raster',
-          type: 'raster',
-          source: 'osm-tiles',
-          minzoom: 0,
-          maxzoom: 19,
-        },
+        { id: 'carto', type: 'raster', source: 'carto-dark', minzoom: 0, maxzoom: 19 },
       ],
     },
     center: [store.HARBIN_CENTER[0], store.HARBIN_CENTER[1]],

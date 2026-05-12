@@ -16,6 +16,17 @@
       </div>
     </header>
 
+    <section v-if="showTimeline" class="timeline-bar">
+      <label class="timeline-label">日期</label>
+      <select v-model="store.selectedDate" class="date-select">
+        <option v-for="d in store.availableDates" :key="d" :value="d">{{ d }}</option>
+      </select>
+
+      <label class="timeline-label">小时</label>
+      <input type="range" v-model.number="store.selectedHour" min="0" max="23" class="hour-slider" />
+      <span class="hour-value">{{ store.selectedHour }}:00</span>
+    </section>
+
     <main class="dash-main">
       <RouterView />
     </main>
@@ -23,7 +34,14 @@
 </template>
 
 <script setup>
+import { computed } from 'vue'
 import { RouterLink, RouterView } from 'vue-router'
+import { useRoute } from 'vue-router'
+import { useDashboardStore } from '@/stores/dashboardStore'
+
+const store = useDashboardStore()
+const route = useRoute()
+const showTimeline = computed(() => route.path !== '/trend')
 
 const tabs = [
   { path: '/congestion', label: '拥堵热力' },
@@ -110,6 +128,56 @@ const tabs = [
 .badge.live {
   color: #0f0;
   background: rgba(0, 255, 0, 0.08);
+}
+
+.timeline-bar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 8px 24px;
+  background: rgba(10, 14, 26, 0.8);
+  border-bottom: 1px solid rgba(0, 204, 255, 0.1);
+  flex-shrink: 0;
+}
+
+.timeline-label {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.date-select {
+  padding: 4px 12px;
+  font-size: 13px;
+  font-family: 'Courier New', monospace;
+  color: #fff;
+  background: #1a1f2e;
+  border: 1px solid rgba(0, 204, 255, 0.2);
+  border-radius: 6px;
+  outline: none;
+  cursor: pointer;
+}
+
+.date-select:focus {
+  border-color: #0cf;
+}
+
+.date-select option {
+  background: #1a1f2e;
+  color: #fff;
+}
+
+.hour-slider {
+  flex: 1;
+  max-width: 300px;
+  accent-color: #0cf;
+  cursor: pointer;
+}
+
+.hour-value {
+  font-size: 13px;
+  font-family: 'Courier New', monospace;
+  color: #0cf;
+  min-width: 40px;
 }
 
 .dash-main {

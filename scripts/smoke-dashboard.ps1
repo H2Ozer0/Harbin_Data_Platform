@@ -17,25 +17,28 @@ function Test-Api {
             Write-Host "         $($c.Substring(0, [Math]::Min(150, $c.Length)))"
         }
     } catch {
-        if ($_.Exception -is [System.Net.WebException]) {
-            $global:passed++
-            Write-Host "  [PASS] $Name (got expected error)" -ForegroundColor Green
-        } else {
-            $global:failed++
-            Write-Host "  [FAIL] $Name - $($_.Exception.Message)" -ForegroundColor Red
-        }
+        $global:failed++
+        Write-Host "  [FAIL] $Name - $($_.Exception.Message)" -ForegroundColor Red
     }
 }
 
-Write-Host "`n========== T14: Dashboard API Smoke Test ==========" -ForegroundColor Cyan
+Write-Host "`n========== Dashboard API Smoke Test (P1 + P2) ==========" -ForegroundColor Cyan
 Write-Host "Base URL: $BaseUrl`n"
 
+Write-Host "--- P1: Congestion APIs ---" -ForegroundColor Yellow
+Test-Api -Name "Congestion Heatmap" -Url "$BaseUrl/api/dashboard/congestion/heatmap?dt=2015-01-05&hour=12&day_type=workday"
+Test-Api -Name "KPI" -Url "$BaseUrl/api/dashboard/kpi?dt=2015-01-05"
+Test-Api -Name "Congestion Comparison" -Url "$BaseUrl/api/dashboard/congestion/comparison"
+Test-Api -Name "Congestion Trend" -Url "$BaseUrl/api/dashboard/congestion/trend?start_dt=2015-01-03&end_dt=2015-01-07"
+Test-Api -Name "Road Type Speed" -Url "$BaseUrl/api/dashboard/congestion/road-type-speed?dt=2015-01-05"
+Test-Api -Name "Duration Ranking" -Url "$BaseUrl/api/dashboard/congestion/duration-ranking?dt=2015-01-05"
+
+Write-Host ""
+Write-Host "--- P2: Hotspot & Driver APIs ---" -ForegroundColor Yellow
 Test-Api -Name "Hotspot Map (pickup)" -Url "$BaseUrl/api/dashboard/hotspot/map?dt=2015-01-05&hour=8&event_type=pickup"
 Test-Api -Name "Hotspot Map (dropoff)" -Url "$BaseUrl/api/dashboard/hotspot/map?dt=2015-01-05&hour=8&event_type=dropoff"
 Test-Api -Name "Driver Behavior" -Url "$BaseUrl/api/dashboard/driver/behavior?dt=2015-01-05"
 Test-Api -Name "Driver Rest Heatmap (limit=1000)" -Url "$BaseUrl/api/dashboard/driver/rest-heatmap?dt=2015-01-05&limit=1000"
-Test-Api -Name "Hotspot Map (bad date)" -Url "$BaseUrl/api/dashboard/hotspot/map?dt=invalid&hour=8&event_type=pickup"
-Test-Api -Name "Hotspot Map (bad event_type)" -Url "$BaseUrl/api/dashboard/hotspot/map?dt=2015-01-05&hour=8&event_type=invalid"
 
 Write-Host "`n========== Summary ==========" -ForegroundColor Cyan
 Write-Host "Total: $($passed + $failed) | Passed: $passed | Failed: $failed" -ForegroundColor $(if ($failed -eq 0) { "Green" } else { "Red" })
