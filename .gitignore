@@ -10,3 +10,5 @@ data/
 *.jld2
 *.csv
 *.h5
+.vscode/
+opencode.json

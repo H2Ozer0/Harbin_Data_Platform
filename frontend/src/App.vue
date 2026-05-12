@@ -1,8 +1,11 @@
 <template>
-  <router-view />
+  <div class="app-shell">
+    <RouterView />
+  </div>
 </template>
 
 <script setup>
+import { RouterView } from 'vue-router'
 </script>
 
 <style>
@@ -19,5 +22,14 @@ html, body, #app {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   background: #0a0e1a;
   color: #fff;
+}
+
+.placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 18px;
 }
 </style>
