@@ -23,6 +23,7 @@
 
 <script setup>
 const navItems = [
+  { label: '拥堵分析', path: '/congestion' },
   { label: '数据目录', path: '/catalog' },
   { label: '数据血缘', path: '/lineage' }
 ]

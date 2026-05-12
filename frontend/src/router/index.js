@@ -3,7 +3,12 @@ import { createRouter, createWebHashHistory } from 'vue-router'
 const routes = [
   {
     path: '/',
-    redirect: '/catalog'
+    redirect: '/congestion'
+  },
+  {
+    path: '/congestion',
+    name: 'Congestion',
+    component: () => import('@/pages/CongestionPage.vue')
   },
   {
     path: '/catalog',
