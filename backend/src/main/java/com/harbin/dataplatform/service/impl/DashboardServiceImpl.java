@@ -369,6 +369,18 @@ public class DashboardServiceImpl implements DashboardService {
 
         String queryId = "q_" + System.currentTimeMillis();
 
+        // 记录字段访问日志（异步，不影响主查询）
+        try {
+            for (String col : columns) {
+                jdbcTemplate.update(
+                        "INSERT INTO ads.data_field_access_log (query_id, table_name, field_name) VALUES (?, ?, ?)",
+                        queryId, fullTable, col
+                );
+            }
+        } catch (Exception e) {
+            log.debug("Failed to log field access: {}", e.getMessage());
+        }
+
         return QueryResponse.builder()
                 .columns(columns)
                 .rows(rows)
