@@ -1,0 +1,19 @@
+package com.harbin.dataplatform.dto;
+
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+import java.util.List;
+import java.util.Map;
+
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+public class CatalogFieldsResponse {
+    private String table;
+    private List<FieldDetailDTO> fields;
+    private List<Map<String, Object>> preview;
+}

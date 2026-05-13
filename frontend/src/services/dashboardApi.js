@@ -50,10 +50,43 @@ export async function fetchDriverRestHeatmap(dt, limit = 1000) {
   return res.data
 }
 
-// P3: Catalog & Lineage stubs
-export async function getCatalogTables() { return { tables: [] }; }
-export async function getCatalogFields(table) { return { table: '', fields: [], preview: [] }; }
-export async function queryCatalog(request) { return { columns: [], rows: [], total_rows: 0, query_id: '' }; }
-export async function getHotFields() { return { hot_fields: [] }; }
-export async function getLineage() { return { nodes: [], edges: [] }; }
-export async function getQuality() { return { tables: [] }; }
+// P3: Catalog & Lineage APIs
+export async function getCatalogTables() {
+  const resp = await api.get('/catalog/tables');
+  return resp.data;
+}
+export async function getCatalogFields(schema, table) {
+  const resp = await api.get(`/catalog/fields/${schema}/${table}`);
+  return resp.data;
+}
+export async function queryCatalog(request) {
+  const resp = await api.post('/catalog/query', request);
+  return resp.data;
+}
+export async function getHotFields() {
+  const resp = await api.get('/catalog/hot-fields');
+  return resp.data;
+}
+export async function getLineage() {
+  const resp = await api.get('/lineage');
+  return resp.data;
+}
+export async function getQuality() {
+  const resp = await api.get('/quality');
+  return resp.data;
+}
+export async function getTrajectory(request) {
+  const resp = await api.get('/trajectory', { params: request });
+  return resp.data;
+}
+
+// P3 pages import as: import { dashboardApi } from '@/services/dashboardApi'
+export const dashboardApi = {
+  getCatalogTables,
+  getCatalogFields,
+  queryCatalog,
+  getHotFields,
+  getLineage,
+  getQuality,
+  getTrajectory,
+}

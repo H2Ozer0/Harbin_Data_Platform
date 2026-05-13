@@ -28,4 +28,19 @@ public interface DashboardService {
     DriverRestHeatmapResponse getDriverRestHeatmap(String dt);
 
     DriverRestHeatmapResponse getDriverRestHeatmap(String dt, int limit);
+
+    // P3: Catalog + Lineage
+    List<CatalogTableDTO> getCatalogTables();
+
+    CatalogFieldsResponse getCatalogFields(String schema, String tableName);
+
+    QueryResponse queryCatalog(QueryRequest request);
+
+    List<HotFieldDTO> getHotFields();
+
+    LineageResponse getLineage();
+
+    QualityResponse getQuality();
+
+    TrajectoryResponse getTrajectory(TrajectoryRequest request);
 }

@@ -24,6 +24,14 @@ export const useDashboardStore = defineStore('dashboard', () => {
     hour.value = newHour
   }
 
+  // P3: catalog & lineage state
+  const catalogKeyword = ref('')
+  const selectedTable = ref(null)
+  function setSelectedTable(table) {
+    selectedTable.value = table
+  }
+  const selectedLayer = ref('all')
+
   // Map tile style: 'dark' | 'light'
   const mapStyle = ref('dark')
   function toggleMapStyle() {
@@ -37,6 +45,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
   return {
     selectedDate, selectedHour, availableDates,
     dt, hour, setDt, setHour, setTime,
+    catalogKeyword, selectedTable, setSelectedTable, selectedLayer,
     mapStyle, toggleMapStyle,
     loadCongestion, loadHotspot, loadDriver,
   }
