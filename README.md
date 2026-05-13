@@ -126,4 +126,24 @@ npm run dev
 # http://localhost:5173/map          ← 原始轨迹地图
 ```
 
+## 部署说明
+
+后端通过环境变量配置数据库连接，需在启动前设置：
+
+| 环境变量 | 说明 | 默认值 |
+|----------|------|--------|
+| `DB_URL` | JDBC 连接地址 | `jdbc:postgresql://localhost:5432/postgres` |
+| `DB_USER` | 数据库用户名 | `postgres` |
+| `DB_PASS` | 数据库密码 | `postgres` |
+
+PowerShell 示例：
+
+```powershell
+$env:DB_URL  = "jdbc:postgresql://你的地址:5432/数据库名"
+$env:DB_USER = "用户名"
+$env:DB_PASS = "密码"
+```
+
+此外需确保数据库已安装 PostGIS 扩展，并按 `backend/src/main/resources/ddl-dashboard.sql` 创建 ADS 层表结构。
+
 
