@@ -144,6 +144,4 @@ $env:DB_USER = "用户名"
 $env:DB_PASS = "密码"
 ```
 
-此外需确保数据库已安装 PostGIS 扩展，并按 `backend/src/main/resources/ddl-dashboard.sql` 创建 ADS 层表结构。
-
 
