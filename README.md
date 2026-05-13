@@ -108,18 +108,4 @@ npm run dev
 
 数据范围：2015-01-03 ~ 2015-01-07（哈尔滨市区，共 5 天）
 
-## ETL 数据回填
-
-首次部署或数据变更后需要运行 ETL 脚本：
-
-```powershell
-# 填充拥堵 ADS 表（从 DW → TDM → ADS）
-python scripts/fill_congestion_ads.py
-
-# 填充热点 + 司机 ADS 表（从 TDM → ADS）
-python scripts/fill_hotspot_driver_ads.py
-```
-
-脚本会自动清空目标表并重新插入数据，支持重复执行。
-
 
