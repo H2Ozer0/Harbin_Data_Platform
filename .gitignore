@@ -25,3 +25,4 @@ data/
 opencode.json
 .playwright-mcp/
 *.png
+!screenshots/*.png
