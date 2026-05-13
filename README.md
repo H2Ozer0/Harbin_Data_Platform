@@ -46,14 +46,41 @@
 
 ## 数据大屏页面
 
-| 页面 | 路由 | 功能 |
-|------|------|------|
-| 拥堵热力图 | `/congestion` | 路段拥堵热力图 + Top10 排行 + 道路类型统计 |
-| 趋势对比 | `/trend` | 5 天速度趋势 + 工作日/节假日对比 |
-| 热点地图 | `/hotspot` | 上下车热点切换 + 网格排行 |
-| 司机画像 | `/driver` | 班次分布 + 活跃时长 + 休息点地图 |
-| 数据资产 | `/catalog` | 4 层数据表浏览 + 字段详情 + 数据查询 |
-| 数据血缘 | `/lineage` | ODS→DW→TDM→ADS 血缘 DAG + 数据质量卡片 |
+### 拥堵热力图（`/congestion`）
+
+路段拥堵热力图 + Top10 排行 + 道路类型统计
+
+![拥堵热力图](screenshots/congestion.png)
+
+### 趋势对比（`/trend`）
+
+5 天速度趋势 + 工作日/节假日对比
+
+![趋势对比](screenshots/trend.png)
+
+### 热点地图（`/hotspot`）
+
+上下车热点切换 + 网格排行
+
+![热点地图](screenshots/hotspot.png)
+
+### 司机画像（`/driver`）
+
+班次分布 + 活跃时长 + 休息点地图
+
+![司机画像](screenshots/driver.png)
+
+### 数据资产（`/catalog`）
+
+4 层数据表浏览 + 字段详情 + 数据查询
+
+![数据资产](screenshots/catalog.png)
+
+### 数据血缘（`/lineage`）
+
+ODS→DW→TDM→ADS 血缘 DAG + 数据质量卡片
+
+![数据血缘](screenshots/lineage.png)
 
 ## 数据库分层
 
