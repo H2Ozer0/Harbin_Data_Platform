@@ -216,7 +216,7 @@ const tabs = [
 .dash-main {
   flex: 1;
   position: relative;
-  overflow: hidden;
+  overflow-y: auto;
   min-height: 0;
 }
 </style>

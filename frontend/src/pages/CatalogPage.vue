@@ -288,7 +288,6 @@ function formatValue(val) {
 .catalog-page {
   display: flex;
   flex-direction: column;
-  height: 100%;
   padding: 16px;
   background: #0a0e1a;
 }
@@ -432,7 +431,7 @@ function formatValue(val) {
   flex: 1;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow-y: auto;
 }
 
 .detail-header {
