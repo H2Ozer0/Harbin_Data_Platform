@@ -28,6 +28,9 @@ CREATE TABLE IF NOT EXISTS ads.congestion_by_segment_hour (
     baseline_speed_kmh DOUBLE PRECISION,
     deviation_pct   DOUBLE PRECISION,
     day_type        TEXT,
+    trip_count      INTEGER DEFAULT 0,
+    length_m        DOUBLE PRECISION,
+    geometry        geometry,
     PRIMARY KEY (dt, hour_of_day, road_segment_id)
 );
 
@@ -100,4 +103,16 @@ CREATE TABLE IF NOT EXISTS ads.data_field_value_score (
     query_count  INTEGER DEFAULT 0,
     rank_value   INTEGER,
     updated_at   TIMESTAMP DEFAULT NOW()
+);
+
+-- 8. Driver rest location enriched (ADS 层替代 tdm 两表 JOIN)
+CREATE TABLE IF NOT EXISTS ads.driver_rest_enriched (
+    dt              DATE,
+    devid           TEXT,
+    lon             DOUBLE PRECISION,
+    lat             DOUBLE PRECISION,
+    rest_minutes    DOUBLE PRECISION,
+    rest_start      TIMESTAMP,
+    shift_pattern   TEXT,
+    PRIMARY KEY (dt, devid, rest_start)
 );

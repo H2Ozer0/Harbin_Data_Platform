@@ -1,12 +1,28 @@
-# 忽略所有的环境和临时文件
+# 环境
 .idea/
+.vscode/
 *.log
 node_modules/
 backend/target/
 frontend/dist/
+backend/backend_pid.txt
+backend/boot.log
+backend/server.log
+backend/startup.log
 
-# 绝对不要传数据文件！！！
+# 数据文件
 data/
 *.jld2
 *.csv
 *.h5
+*.osm.pbf
+*.rar
+
+# 开发工具
+.sisyphus/
+.claude/
+.editorconfig
+opencode.json
+.playwright-mcp/
+*.png
+!screenshots/*.png

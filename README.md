@@ -1,78 +1,119 @@
-# 哈尔滨交通数据中台（Data Platform）— 数据大屏
+# 哈尔滨交通数据中台
 
-本仓库用于出租车轨迹数据的离线处理与在线可视化。当前扩展为包含 **6 页数据大屏**，供课程演示/领导汇报使用。
+基于出租车 GPS 轨迹数据的离线处理与在线可视化平台，包含 6 页数据大屏，覆盖拥堵分析、热点检测、司机画像、数据资产管理和数据血缘追踪。
+
+## 技术栈
+
+| 层 | 技术 |
+|----|------|
+| 后端 | Java 17、Spring Boot 3.2、JdbcTemplate、Caffeine 缓存 |
+| 前端 | Vue 3、Vite 5、Pinia、ECharts 6、MapLibre GL 4.7、deck.gl 8.9 |
+| 数据库 | PostgreSQL 15.4 + PostGIS 3.3.4 |
+| 离线处理 | Julia (LibPQ + DataFrames) |
 
 ## 项目结构
 
 ```
-Data_Platform-main/
-├── backend/                      # Spring Boot 后端 API
-│   └── src/main/java/com/harbin/dataplatform/
-│       ├── controller/
-│       │   ├── TaxiController.java        # 原有地图/轨迹 API
-│       │   ├── MapController.java         # 原有地图边界 API
-│       │   └── DashboardController.java   # 新增大屏 API（各人添加）
-│       ├── service/                       # 业务逻辑
-│       ├── repository/
-│       │   ├── TaxiRepository.java        # 原有
-│       │   └── DashboardRepository.java   # 新增大屏 SQL（各人添加）
-│       └── dto/                           # 新增大屏 DTO
-├── frontend/                     # Vue 3 前端
+├── backend/                    # Spring Boot 后端
+│   └── src/main/java/.../
+│       ├── controller/         # REST API 控制器
+│       ├── service/            # 业务逻辑层
+│       ├── repository/         # SQL 查询层
+│       ├── dto/                # 数据传输对象
+│       ├── config/             # 缓存、索引等配置
+│       └── resources/
+│           ├── application.yml
+│           ├── ddl-dashboard.sql   # ADS 表建表语句
+│           └── ddl-indexes.sql     # 索引自动创建
+├── frontend/                   # Vue 3 前端
 │   └── src/
-│       ├── router/index.js                # 7 条路由（6 个大屏页 + 1 个原地图）
-│       ├── layouts/DashboardLayout.vue    # 大屏框架（导航栏 + 时间轴）
-│       ├── pages/                         # 7 个页面
-│       │   ├── CongestionPage.vue         # P1: 拥堵热力图
-│       │   ├── TrendPage.vue              # P1: 5 天趋势
-│       │   ├── HotspotPage.vue            # P2: 上下车热点
-│       │   ├── DriverPage.vue             # P2: 司机行为
-│       │   ├── CatalogPage.vue            # P3: 数据资产取数
-│       │   ├── LineagePage.vue            # P3: 数据血缘 + 质量
-│       │   └── OriginalMapPage.vue        # 保留原地图
-│       ├── services/dashboardApi.js       # 新增加 API 调用
-│       ├── stores/dashboardStore.js       # 新增时间状态管理
-│       └── utils/chartTheme.js            # ECharts 暗色主题
-├── scripts/
-│   ├── start-backend.ps1          # 启动后端
-│   ├── stop-backend.ps1           # 停止后端
-│   ├── smoke-backend.ps1          # 原有 API 冒烟测试
-│   ├── smoke-dashboard.ps1        # 新增大屏 API 冒烟测试（各人补充）
-│   ├── fill_congestion_ads.py     # P1: 填充 ADS 拥堵表
-│   └── fill_hotspot_driver_ads.py # P2: 填充 ADS 热点 + 司机表
-├── julia/
-│   ├── driver_rest_etl.jl         # P2: 司机休息地段推断 ETL
-│   └── (原有脚本)
-├── docs/
-│   └── api-contract.md            # API 合同（已提前定义好）
-└── .sisyphus/plans/               # 开发计划（含三份分工文档）
-   ├── README-NEW-PLAN.md                # 总体规划
-   ├── p1-execution-plan.md              # P1 执行计划
-   ├── p2-execution-plan.md              # P2 执行计划
-   ├── p3-execution-plan.md              # P3 执行计划
-   └── api-contract-reference.md         # API 合同参考
+│       ├── pages/              # 7 个页面组件
+│       ├── layouts/            # 大屏布局（导航栏+时间轴）
+│       ├── components/         # 地图组件
+│       ├── services/           # API 调用封装
+│       ├── stores/             # Pinia 状态管理
+│       └── utils/              # ECharts 暗色主题
+├── scripts/                    # ETL 和运维脚本
+│   ├── fill_congestion_ads.py  # 拥堵数据 ETL
+│   ├── fill_hotspot_driver_ads.py  # 热点+司机数据 ETL
+│   ├── start-backend.ps1       # 启动后端
+│   └── stop-backend.ps1        # 停止后端
+└── julia/                      # Julia 离线处理脚本
+    ├── driver_rest_etl.jl      # 司机休息点推断
+    ├── mapmatch.jl             # 地图匹配
+    └── traffic.jl              # 交通流计算
 ```
 
-## 3 人分工
+## 数据大屏页面
 
-| 角色 | 负责页面 | 核心工作 |
-|------|---------|---------|
-| **Person 1** | 拥堵热力图 + 5天趋势对比 | 填充 ADS 表 → 后端 API → 前端地图+ECharts |
-| **Person 2** | 上下车热点 + 司机行为分析 | Julia ETL 推断休息 → 填充 ADS → 后端 API → 前端 |
-| **Person 3** | 数据资产取数 + 血缘质量 + 集成 | 取数系统 → 血缘展示 → 最后合并所有人代码 |
+### 拥堵热力图（`/congestion`）
 
-每人都有自己的 `.sisyphus/plans/p1-execution-plan.md`、`.sisyphus/plans/p2-execution-plan.md`、`.sisyphus/plans/p3-execution-plan.md` 文件，里面包含按顺序执行的任务和代码示例。
+路段拥堵热力图 + Top10 排行 + 道路类型统计
 
-## 技术栈
+![拥堵热力图](screenshots/congestion.png)
 
-- **后端**：Java 17、Spring Boot 3、JdbcTemplate、PostgreSQL 15.4（+ PostGIS）
-- **前端**：Vue 3、Vite 5、Pinia、vue-router 4、ECharts 6、MapLibre GL 4.7、deck.gl 8.9
-- **离线**：Julia（LibPQ + DataFrames）
-- **数据库分层**：ODS（原始）→ DW（建模）→ TDM（算法模型）→ ADS（展示）
+### 趋势对比（`/trend`）
+
+5 天速度趋势 + 工作日/节假日对比
+
+![趋势对比](screenshots/trend.png)
+
+### 热点地图（`/hotspot`）
+
+上下车热点切换 + 网格排行
+
+![热点地图](screenshots/hotspot.png)
+
+### 司机画像（`/driver`）
+
+班次分布 + 活跃时长 + 休息点地图
+
+![司机画像](screenshots/driver.png)
+
+### 数据资产（`/catalog`）
+
+4 层数据表浏览 + 字段详情 + 数据查询
+
+![数据资产](screenshots/catalog.png)
+
+### 数据血缘（`/lineage`）
+
+ODS→DW→TDM→ADS 血缘 DAG + 数据质量卡片
+
+![数据血缘](screenshots/lineage.png)
+
+## 数据库分层
+
+```
+ODS（原始层）
+  └─ ods_taxi_trips_raw          120万行 GPS 轨迹
+       │
+       ├──ETL聚合──→ DW（维度建模层）
+       │              └─ fact_congestion_seg_hour    134万行
+       │                    │
+       │                    └──5天窗口──→ TDM（算法模型层）
+       │                                    ├─ congestion_baseline_5day   83万行
+       │                                    ├─ driver_shift_pattern      5.5万行
+       │                                    └─ grid_hotspot_score        19万行
+       │                                          │
+       │                                          └──指标增强──→ ADS（应用展示层）
+       │                                                        ├─ congestion_by_segment_hour  134万行
+       │                                                        ├─ hotspot_grid_enriched       19万行
+       │                                                        ├─ driver_behavior_summary     25行
+       │                                                        └─ driver_rest_enriched        37万行
+       │
+       └──空间聚合──→ TDM → ADS（热点链路）
+       └──模式识别──→ TDM → ADS（司机链路）
+```
+
+所有大屏查询只读取 ADS 层表，符合数据中台分层架构。
+
+数据范围：2015-01-03 ~ 2015-01-07（哈尔滨市区，共 5 天）。
 
 ## 快速启动
 
 ```powershell
-# 1. 启动后端
+# 1. 启动后端（默认端口 8082）
 powershell -ExecutionPolicy Bypass -File .\scripts\start-backend.ps1 -KillPortOwner
 
 # 2. 启动前端
@@ -80,72 +121,27 @@ cd frontend
 npm install
 npm run dev
 
-# 3. 打开浏览器
-# http://localhost:5173/congestion  ← 大屏首页
-# http://localhost:5173/map          ← 原地图
-
-# 4. 冒烟测试
-powershell -ExecutionPolicy Bypass -File .\scripts\smoke-backend.ps1
+# 3. 访问
+# http://localhost:5173/congestion   ← 大屏首页
+# http://localhost:5173/map          ← 原始轨迹地图
 ```
 
-## 数据库
+## 部署说明
 
-| 信息 | 值 |
-|------|-----|
-| 类型 | PostgreSQL 15.4 + PostGIS 3.3.4 |
-| 地址 | `101.35.234.65:5432` |
-| 数据库 | `postgres` |
-| 用户 | `osmuser` |
-| 密码 | `pass` |
+后端通过环境变量配置数据库连接，需在启动前设置：
 
-### 数据分层
+| 环境变量 | 说明 | 默认值 |
+|----------|------|--------|
+| `DB_URL` | JDBC 连接地址 | `jdbc:postgresql://localhost:5432/postgres` |
+| `DB_USER` | 数据库用户名 | `postgres` |
+| `DB_PASS` | 数据库密码 | `postgres` |
 
-| 层 | 说明 | 示例表 |
-|----|------|--------|
-| **ODS** | 原始数据（134 万行轨迹） | `ods_taxi_trips_raw` |
-| **DW** | 维度建模 | `fact_congestion_seg_hour`、`dim_grid` 等 |
-| **TDM** | 算法模型 | `congestion_baseline_5day`(83万) `driver_shift_pattern`(5.5万) `grid_hotspot_score`(18.8万) |
-| **ADS** | 展示层（已重建，7 张新表） | `congestion_by_segment_hour`、`hotspot_grid_enriched` 等 |
+PowerShell 示例：
 
-### 数据说明
+```powershell
+$env:DB_URL  = "jdbc:postgresql://你的地址:5432/数据库名"
+$env:DB_USER = "用户名"
+$env:DB_PASS = "密码"
+```
 
-- 数据范围：**2015-01-03 ~ 2015-01-07**（共 5 天，含节假日到工作日）
-- 空间范围：哈尔滨市区（lon 126.0~127.2, lat 45.4~46.2）
-- 时区：UTC（代码和数据一致）
 
-## 数据大屏 6 个页面
-
-| 页码 | 路由 | P1 | P2 | P3 |
-|------|------|----|----|----|
-| 1 | `/congestion` | 拥堵热力图 + Top10 排行 | - | - |
-| 2 | `/trend` | 5 天趋势 + 日类型对比 | - | - |
-| 3 | `/hotspot` | - | 上下车热点切换 + 排行 | - |
-| 4 | `/driver` | - | 班次饼图 + 活跃时长 + 休息地图 | - |
-| 5 | `/catalog` | - | - | 取数界面 + 字段热度 |
-| 6 | `/lineage` | - | - | 血缘 DAG + 质量卡片 |
-
-## 常见问题
-
-1. **后端启动失败，8081 端口占用**
-   ```powershell
-   .\scripts\start-backend.ps1 -KillPortOwner
-   ```
-
-2. **前端请求不到数据**
-   - 确认后端已启动（`curl http://localhost:8081/api/map/boundary`）
-   - 确认 `frontend/vite.config.js` 中 `/api` 代理指向 `http://localhost:8081`
-
-3. **数据库连不上**
-   - 先 ping `101.35.234.65` 确认网络可达
-   - 课程展示时建议连校园网或 VPN
-
-4. **三份分工文档在哪？**
-   - `.sisyphus/plans/p1-execution-plan.md` — 给 P1
-   - `.sisyphus/plans/p2-execution-plan.md` — 给 P2
-   - `.sisyphus/plans/p3-execution-plan.md` — 给 P3
-   - `.sisyphus/plans/api-contract-reference.md` — API 合同参考
-   - `docs/api-contract.md` — 完整 API 合同（由 Sisyphus 写入）
-
-## 开发文档
-
-更完整的启动顺序、排障方法和脚本说明见：`docs/DEVELOPMENT.md`

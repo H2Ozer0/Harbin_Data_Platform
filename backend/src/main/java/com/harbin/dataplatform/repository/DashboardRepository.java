@@ -15,6 +15,8 @@ public class DashboardRepository {
         this.jdbcTemplate = jdbcTemplate;
     }
 
+    // ========== P1: Congestion queries ==========
+
     /**
      * 拥堵热力图：查询指定日期+小时+日类型的路段级拥堵数据
      */
@@ -23,22 +25,18 @@ public class DashboardRepository {
             SELECT
                 c.road_segment_id,
                 c.road_name,
+                c.road_type,
                 c.avg_speed_kmh,
                 c.congestion_index,
                 c.deviation_pct,
-                f.trip_count,
-                ST_AsGeoJSON(r.geom) AS geometry
+                c.trip_count,
+                ST_AsGeoJSON(c.geometry) AS geometry
             FROM ads.congestion_by_segment_hour c
-            JOIN dw.dim_road_segment r ON r.road_segment_id = c.road_segment_id
-            JOIN dw.fact_congestion_seg_hour f
-              ON f.road_segment_id = c.road_segment_id
-             AND f.dt = c.dt
-             AND f.hour_of_day = c.hour_of_day
             WHERE c.dt = ?::date
               AND c.hour_of_day = ?
               AND c.day_type = ?
-              AND f.trip_count >= 10
-              AND r.length_m >= 100
+              AND c.trip_count >= 10
+              AND c.length_m >= 100
             ORDER BY c.congestion_index DESC
         """;
         return jdbcTemplate.queryForList(sql, dt, hour, dayType);
@@ -57,13 +55,6 @@ public class DashboardRepository {
                 FROM ads.congestion_by_segment_hour c
                 WHERE c.dt = ?::date
             ),
-            top_congested AS (
-                SELECT c.road_name, c.congestion_index
-                FROM ads.congestion_by_segment_hour c
-                WHERE c.dt = ?::date AND c.road_name IS NOT NULL
-                ORDER BY c.congestion_index DESC
-                LIMIT 5
-            ),
             most_active_hour AS (
                 SELECT c.hour_of_day
                 FROM ads.congestion_by_segment_hour c
@@ -71,23 +62,16 @@ public class DashboardRepository {
                 GROUP BY c.hour_of_day
                 ORDER BY COUNT(*) DESC
                 LIMIT 1
-            ),
-            vehicle_count AS (
-                SELECT COUNT(DISTINCT t.devid) AS total_vehicles
-                FROM ods.ods_taxi_trips_raw t
-                WHERE (t.tms_seq)[1] >= EXTRACT(EPOCH FROM (?::date::timestamp))
-                  AND (t.tms_seq)[1] < EXTRACT(EPOCH FROM (?::date::timestamp + INTERVAL '1 day'))
             )
             SELECT
-                COALESCE(v.total_vehicles, 0) AS total_vehicles,
+                0 AS total_vehicles,
                 COALESCE(s.total_trips, 0) AS total_trips,
                 s.avg_speed_kmh,
                 h.hour_of_day AS most_active_hour
             FROM daily_stats s
             CROSS JOIN most_active_hour h
-            CROSS JOIN vehicle_count v
         """;
-        return jdbcTemplate.queryForList(sql, dt, dt, dt, dt, dt);
+        return jdbcTemplate.queryForList(sql, dt, dt);
     }
 
     /**
@@ -153,13 +137,9 @@ public class DashboardRepository {
                 ROUND(AVG(c.avg_speed_kmh)::numeric, 1) AS avg_speed,
                 COUNT(*) AS segment_count
             FROM ads.congestion_by_segment_hour c
-            JOIN dw.fact_congestion_seg_hour f
-              ON f.road_segment_id = c.road_segment_id
-             AND f.dt = c.dt
-             AND f.hour_of_day = c.hour_of_day
             WHERE c.dt = ?::date
               AND c.road_type IN ('trunk', 'primary', 'secondary', 'residential')
-              AND f.trip_count >= 10
+              AND c.trip_count >= 10
             GROUP BY c.hour_of_day, c.road_type
             ORDER BY c.hour_of_day, c.road_type
         """;
@@ -168,7 +148,6 @@ public class DashboardRepository {
 
     /**
      * 拥堵持续时间排行：统计每条路段在指定日期有多少小时处于拥堵状态
-     * 拥堵定义：deviation_pct < -20% 且 avg_speed_kmh < 20
      */
     public List<Map<String, Object>> findCongestionDurationRanking(String dt) {
         String sql = """
@@ -180,19 +159,90 @@ public class DashboardRepository {
                 ROUND(AVG(c.avg_speed_kmh)::numeric, 1) AS avg_speed_when_congested,
                 ROUND(MIN(c.deviation_pct)::numeric, 1) AS worst_deviation
             FROM ads.congestion_by_segment_hour c
-            JOIN dw.fact_congestion_seg_hour f
-              ON f.road_segment_id = c.road_segment_id
-             AND f.dt = c.dt
-             AND f.hour_of_day = c.hour_of_day
             WHERE c.dt = ?::date
               AND c.road_name IS NOT NULL
               AND c.deviation_pct < -20
               AND c.avg_speed_kmh < 20
-              AND f.trip_count >= 10
+              AND c.trip_count >= 10
             GROUP BY c.road_segment_id, c.road_name, c.road_type
             ORDER BY congestion_hours DESC, avg_speed_when_congested ASC
             LIMIT 10
         """;
         return jdbcTemplate.queryForList(sql, dt);
+    }
+
+    // ========== P2: Hotspot & Driver queries ==========
+
+    public List<Map<String, Object>> findHotspotGrids(String dt, int hour, String eventType) {
+        String sql = """
+            SELECT grid_id, lon, lat, event_count, hotspot_score, rank_in_hour, event_type
+            FROM ads.hotspot_grid_enriched
+            WHERE dt = ?::date AND hour_of_day = ? AND event_type = ?
+            ORDER BY rank_in_hour ASC
+        """;
+        return jdbcTemplate.queryForList(sql, dt, hour, eventType);
+    }
+
+    public long countHotspotGrids(String dt, int hour, String eventType) {
+        String sql = """
+            SELECT COUNT(*)
+            FROM ads.hotspot_grid_enriched
+            WHERE dt = ?::date AND hour_of_day = ? AND event_type = ?
+        """;
+        Integer count = jdbcTemplate.queryForObject(sql, Integer.class, dt, hour, eventType);
+        return count == null ? 0 : count;
+    }
+
+    public List<Map<String, Object>> findDriverBehavior(String dt) {
+        String sql = """
+            SELECT shift_pattern, driver_count, avg_active_minutes
+            FROM ads.driver_behavior_summary
+            WHERE dt = ?::date
+            ORDER BY driver_count DESC
+        """;
+        return jdbcTemplate.queryForList(sql, dt);
+    }
+
+    public long countDrivers(String dt) {
+        String sql = """
+            SELECT SUM(driver_count)
+            FROM ads.driver_behavior_summary
+            WHERE dt = ?::date
+        """;
+        Integer count = jdbcTemplate.queryForObject(sql, Integer.class, dt);
+        return count == null ? 0 : count;
+    }
+
+    public List<Map<String, Object>> findRestLocations(String dt) {
+        return findRestLocations(dt, -1);
+    }
+
+    public List<Map<String, Object>> findRestLocations(String dt, int limit) {
+        String sql;
+        if (limit > 0) {
+            sql = """
+                SELECT devid, lon, lat, rest_minutes, rest_start, shift_pattern
+                FROM ads.driver_rest_enriched
+                WHERE dt = ?::date
+                LIMIT ?
+            """;
+            return jdbcTemplate.queryForList(sql, dt, limit);
+        }
+        sql = """
+            SELECT devid, lon, lat, rest_minutes, rest_start, shift_pattern
+            FROM ads.driver_rest_enriched
+            WHERE dt = ?::date
+        """;
+        return jdbcTemplate.queryForList(sql, dt);
+    }
+
+    public long countRestLocations(String dt) {
+        String sql = """
+            SELECT COUNT(*)
+            FROM ads.driver_rest_enriched
+            WHERE dt = ?::date
+        """;
+        Integer count = jdbcTemplate.queryForObject(sql, Integer.class, dt);
+        return count == null ? 0 : count;
     }
 }

@@ -1,77 +1,45 @@
-$ErrorActionPreference = "Stop"
-
-$baseUrl = "http://localhost:8081/api/dashboard"
-
-$tests = @(
-    @{ Name = "heatmap"; Url = "$baseUrl/congestion/heatmap?dt=2015-01-05&hour=12&day_type=workday" }
-    @{ Name = "kpi"; Url = "$baseUrl/kpi?dt=2015-01-05" }
-    @{ Name = "comparison"; Url = "$baseUrl/congestion/comparison" }
-    @{ Name = "trend"; Url = "$baseUrl/congestion/trend?start_dt=2015-01-03&end_dt=2015-01-07" }
+param(
+    [string]$BaseUrl = "http://localhost:8081",
+    [switch]$Verbose
 )
 
-$allPassed = $true
+$passed = 0
+$failed = 0
 
-Write-Host "===== P1 Dashboard API Smoke Test ====="
-Write-Host ""
-
-foreach ($test in $tests) {
-    $name = $test.Name
-    $url = $test.Url
-    $start = Get-Date
-
+function Test-Api {
+    param($Name, $Url, $TimeoutSec = 60)
     try {
-        $res = Invoke-WebRequest -UseBasicParsing -Uri $url -Method Get -TimeoutSec 30
-        $elapsed = (Get-Date) - $start
-        $ms = [math]::Round($elapsed.TotalMilliseconds)
-        $data = $res.Content | ConvertFrom-Json
-
-        $ok = ($res.StatusCode -eq 200)
-        if ($ok) {
-            Write-Host "[PASS] $name" -ForegroundColor Green
-        } else {
-            Write-Host "[FAIL] $name (HTTP $($res.StatusCode))" -ForegroundColor Red
+        $res = Invoke-WebRequest -UseBasicParsing -Uri $Url -Method Get -TimeoutSec $TimeoutSec
+        $global:passed++
+        Write-Host "  [PASS] $Name" -ForegroundColor Green
+        if ($Verbose) {
+            $c = $res.Content
+            Write-Host "         $($c.Substring(0, [Math]::Min(150, $c.Length)))"
         }
-        Write-Host "       Time: ${ms}ms"
-
-        if ($name -eq "heatmap") {
-            $total = $data.total
-            $segCount = if ($data.segments) { $data.segments.Count } else { 0 }
-            $firstRoad = if ($segCount -gt 0) { $data.segments[0].road_name } else { "N/A" }
-            Write-Host "       total=$total segments=$segCount topRoad=$firstRoad"
-        }
-        elseif ($name -eq "kpi") {
-            $v = $data.total_vehicles
-            $t = $data.total_trips
-            $s = [math]::Round($data.avg_speed_kmh, 1)
-            $h = $data.most_active_hour
-            $top5count = if ($data.top5_congested) { $data.top5_congested.Count } else { 0 }
-            Write-Host "       vehicles=$v trips=$t avgSpeed=$s activeHour=$h top5=$top5count"
-        }
-        elseif ($name -eq "comparison") {
-            $count = if ($data.hourly) { $data.hourly.Count } else { 0 }
-            Write-Host "       hours=$count"
-        }
-        elseif ($name -eq "trend") {
-            $count = if ($data.daily) { $data.daily.Count } else { 0 }
-            Write-Host "       days=$count"
-        }
-        Write-Host ""
-
-        if (-not $ok) { $allPassed = $false }
-    }
-    catch {
-        $elapsed = (Get-Date) - $start
-        $ms = [math]::Round($elapsed.TotalMilliseconds)
-        Write-Host "[FAIL] $name (Exception)" -ForegroundColor Red
-        Write-Host "       Time: ${ms}ms"
-        Write-Host "       Error: $($_.Exception.Message)"
-        Write-Host ""
-        $allPassed = $false
+    } catch {
+        $global:failed++
+        Write-Host "  [FAIL] $Name - $($_.Exception.Message)" -ForegroundColor Red
     }
 }
 
-if ($allPassed) {
-    Write-Host "ALL P1 API TESTS PASSED" -ForegroundColor Green
-} else {
-    Write-Host "SOME P1 API TESTS FAILED" -ForegroundColor Red
-}
+Write-Host "`n========== Dashboard API Smoke Test (P1 + P2) ==========" -ForegroundColor Cyan
+Write-Host "Base URL: $BaseUrl`n"
+
+Write-Host "--- P1: Congestion APIs ---" -ForegroundColor Yellow
+Test-Api -Name "Congestion Heatmap" -Url "$BaseUrl/api/dashboard/congestion/heatmap?dt=2015-01-05&hour=12&day_type=workday"
+Test-Api -Name "KPI" -Url "$BaseUrl/api/dashboard/kpi?dt=2015-01-05"
+Test-Api -Name "Congestion Comparison" -Url "$BaseUrl/api/dashboard/congestion/comparison"
+Test-Api -Name "Congestion Trend" -Url "$BaseUrl/api/dashboard/congestion/trend?start_dt=2015-01-03&end_dt=2015-01-07"
+Test-Api -Name "Road Type Speed" -Url "$BaseUrl/api/dashboard/congestion/road-type-speed?dt=2015-01-05"
+Test-Api -Name "Duration Ranking" -Url "$BaseUrl/api/dashboard/congestion/duration-ranking?dt=2015-01-05"
+
+Write-Host ""
+Write-Host "--- P2: Hotspot & Driver APIs ---" -ForegroundColor Yellow
+Test-Api -Name "Hotspot Map (pickup)" -Url "$BaseUrl/api/dashboard/hotspot/map?dt=2015-01-05&hour=8&event_type=pickup"
+Test-Api -Name "Hotspot Map (dropoff)" -Url "$BaseUrl/api/dashboard/hotspot/map?dt=2015-01-05&hour=8&event_type=dropoff"
+Test-Api -Name "Driver Behavior" -Url "$BaseUrl/api/dashboard/driver/behavior?dt=2015-01-05"
+Test-Api -Name "Driver Rest Heatmap (limit=1000)" -Url "$BaseUrl/api/dashboard/driver/rest-heatmap?dt=2015-01-05&limit=1000"
+
+Write-Host "`n========== Summary ==========" -ForegroundColor Cyan
+Write-Host "Total: $($passed + $failed) | Passed: $passed | Failed: $failed" -ForegroundColor $(if ($failed -eq 0) { "Green" } else { "Red" })
+if ($failed -eq 0) { exit 0 } else { exit 1 }

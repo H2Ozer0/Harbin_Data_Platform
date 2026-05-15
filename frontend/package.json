@@ -17,6 +17,7 @@
     "@luma.gl/webgl": "8.5.21",
     "axios": "^1.6.7",
     "echarts": "^6.0.0",
+    "harbin-data-platform": "file:..",
     "lodash-es": "^4.17.21",
     "maplibre-gl": "^4.7.1",
     "pinia": "^2.1.7",

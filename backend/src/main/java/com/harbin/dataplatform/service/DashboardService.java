@@ -1,156 +1,46 @@
 package com.harbin.dataplatform.service;
 
-import com.harbin.dataplatform.dto.ComparisonResponseDTO;
-import com.harbin.dataplatform.dto.ComparisonResponseDTO.HourlyComparisonDTO;
-import com.harbin.dataplatform.dto.CongestionHeatmapDTO;
-import com.harbin.dataplatform.dto.HeatmapResponse;
-import com.harbin.dataplatform.dto.KPIResponseDTO;
-import com.harbin.dataplatform.dto.KPIResponseDTO.CongestedRoadDTO;
-import com.harbin.dataplatform.dto.TrendResponseDTO;
-import com.harbin.dataplatform.dto.TrendResponseDTO.DailyTrendDTO;
-import com.harbin.dataplatform.repository.DashboardRepository;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Service;
+import com.harbin.dataplatform.dto.*;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-@Slf4j
-@Service
-@RequiredArgsConstructor
-public class DashboardService {
+public interface DashboardService {
 
-    private final DashboardRepository dashboardRepository;
+    // P1: Congestion
+    HeatmapResponse getHeatmap(String dt, int hour, String dayType);
 
-    /**
-     * 获取拥堵热力图数据
-     */
-    public HeatmapResponse getHeatmap(String dt, int hour, String dayType) {
-        List<Map<String, Object>> rows = dashboardRepository.findHeatmapByDtHourAndDayType(dt, hour, dayType);
+    KPIResponseDTO getKPI(String dt);
 
-        List<CongestionHeatmapDTO> segments = new ArrayList<>();
-        for (Map<String, Object> row : rows) {
-            Long segId = toLong(row.get("road_segment_id"));
-            String roadName = toStringOrNull(row.get("road_name"));
-            Double avgSpeed = toDouble(row.get("avg_speed_kmh"));
-            Double ci = toDouble(row.get("congestion_index"));
-            Double deviation = toDouble(row.get("deviation_pct"));
-            Integer tripCount = toInteger(row.get("trip_count"));
-            String geometry = toStringOrNull(row.get("geometry"));
+    ComparisonResponseDTO getComparison();
 
-            segments.add(new CongestionHeatmapDTO(segId, roadName, avgSpeed, ci, deviation, tripCount, null, null, geometry));
-        }
+    TrendResponseDTO getTrend(String startDt, String endDt);
 
-        return new HeatmapResponse(segments, segments.size());
-    }
+    List<Map<String, Object>> getRoadTypeSpeed(String dt);
 
-    /**
-     * 获取关键指标
-     */
-    public KPIResponseDTO getKPI(String dt) {
-        List<Map<String, Object>> kpiRows = dashboardRepository.findKPIByDt(dt);
-        Map<String, Object> kpiRow = kpiRows.isEmpty() ? Map.of() : kpiRows.get(0);
+    List<Map<String, Object>> getCongestionDurationRanking(String dt);
 
-        long totalVehicles = toLong(kpiRow.get("total_vehicles"), 0L);
-        long totalTrips = toLong(kpiRow.get("total_trips"), 0L);
-        Double avgSpeedKmh = toDouble(kpiRow.get("avg_speed_kmh"));
-        int mostActiveHour = toInt(kpiRow.get("most_active_hour"), 0);
+    // P2: Hotspot & Driver
+    HotspotGridResponse getHotspotGrid(String dt, int hour, String eventType);
 
-        // Top5 congestion
-        List<Map<String, Object>> topRows = dashboardRepository.findTop5CongestedByDt(dt);
-        List<CongestedRoadDTO> top5 = topRows.stream()
-                .map(r -> new CongestedRoadDTO(toStringOrNull(r.get("road_name")), toDouble(r.get("congestion_index"))))
-                .toList();
+    DriverBehaviorResponse getDriverBehavior(String dt);
 
-        return new KPIResponseDTO(dt, totalVehicles, totalTrips, avgSpeedKmh, top5, mostActiveHour);
-    }
+    DriverRestHeatmapResponse getDriverRestHeatmap(String dt);
 
-    /**
-     * 获取5天拥堵趋势
-     */
-    public TrendResponseDTO getTrend(String startDt, String endDt) {
-        List<Map<String, Object>> rows = dashboardRepository.findTrendByDateRange(startDt, endDt);
+    DriverRestHeatmapResponse getDriverRestHeatmap(String dt, int limit);
 
-        List<DailyTrendDTO> daily = rows.stream()
-                .map(r -> new DailyTrendDTO(
-                        toStringOrNull(r.get("dt")),
-                        toDouble(r.get("avg_congestion_index")),
-                        toDouble(r.get("avg_speed_kmh")),
-                        toLong(r.get("total_trips"), 0L)
-                ))
-                .toList();
+    // P3: Catalog + Lineage
+    List<CatalogTableDTO> getCatalogTables();
 
-        return new TrendResponseDTO(daily);
-    }
+    CatalogFieldsResponse getCatalogFields(String schema, String tableName);
 
-    /**
-     * 获取日类型对比数据
-     */
-    public ComparisonResponseDTO getComparison() {
-        List<Map<String, Object>> rows = dashboardRepository.findComparisonByHour();
+    QueryResponse queryCatalog(QueryRequest request);
 
-        List<HourlyComparisonDTO> hourly = new ArrayList<>();
-        for (Map<String, Object> row : rows) {
-            hourly.add(new HourlyComparisonDTO(
-                    toInt(row.get("hour_of_day"), 0),
-                    toDouble(row.get("workday_avg_speed")),
-                    toDouble(row.get("holiday_avg_speed")),
-                    toDouble(row.get("makeup_workday_avg_speed")),
-                    toDouble(row.get("workday_congestion")),
-                    toDouble(row.get("holiday_congestion")),
-                    toDouble(row.get("makeup_workday_congestion"))
-            ));
-        }
+    List<HotFieldDTO> getHotFields();
 
-        return new ComparisonResponseDTO(hourly);
-    }
+    LineageResponse getLineage();
 
-    /**
-     * 道路类型 × 24h 速度曲线
-     */
-    public List<Map<String, Object>> getRoadTypeSpeed(String dt) {
-        return dashboardRepository.findRoadTypeSpeedByHour(dt);
-    }
+    QualityResponse getQuality();
 
-    /**
-     * 拥堵持续时间 Top10 排行
-     */
-    public List<Map<String, Object>> getCongestionDurationRanking(String dt) {
-        return dashboardRepository.findCongestionDurationRanking(dt);
-    }
-
-    private Long toLong(Object obj) {
-        if (obj == null) return null;
-        if (obj instanceof Number n) return n.longValue();
-        return Long.parseLong(obj.toString());
-    }
-
-    private long toLong(Object obj, long defaultValue) {
-        Long v = toLong(obj);
-        return v != null ? v : defaultValue;
-    }
-
-    private int toInt(Object obj, int defaultValue) {
-        if (obj == null) return defaultValue;
-        if (obj instanceof Number n) return n.intValue();
-        try { return Integer.parseInt(obj.toString()); } catch (Exception e) { return defaultValue; }
-    }
-
-    private Double toDouble(Object obj) {
-        if (obj == null) return null;
-        if (obj instanceof Number n) return n.doubleValue();
-        return Double.parseDouble(obj.toString());
-    }
-
-    private Integer toInteger(Object obj) {
-        if (obj == null) return null;
-        if (obj instanceof Number n) return n.intValue();
-        return Integer.parseInt(obj.toString());
-    }
-
-    private String toStringOrNull(Object obj) {
-        return obj != null ? obj.toString() : null;
-    }
+    TrajectoryResponse getTrajectory(TrajectoryRequest request);
 }

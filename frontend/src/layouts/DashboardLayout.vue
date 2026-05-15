@@ -1,16 +1,23 @@
 <template>
-  <div class="dashboard-layout">
-    <header class="top-nav">
-      <div class="nav-brand">哈尔滨交通数据大屏</div>
-      <nav class="nav-tabs">
-        <router-link to="/congestion" class="nav-tab" active-class="active">拥堵</router-link>
-        <router-link to="/trend" class="nav-tab" active-class="active">趋势</router-link>
-        <router-link to="/hotspot" class="nav-tab" active-class="active">热点</router-link>
-        <router-link to="/driver" class="nav-tab" active-class="active">司机</router-link>
-        <router-link to="/catalog" class="nav-tab" active-class="active">数据资产</router-link>
-        <router-link to="/lineage" class="nav-tab" active-class="active">血缘</router-link>
-        <router-link to="/map" class="nav-tab" active-class="active">原地图</router-link>
+  <div class="dash-layout">
+    <header class="dash-header">
+      <h1 class="title">哈尔滨交通数据中台</h1>
+      <nav class="dash-nav">
+        <RouterLink
+          v-for="tab in tabs"
+          :key="tab.path"
+          :to="tab.path"
+          class="nav-tab"
+          active-class="active"
+        >{{ tab.label }}</RouterLink>
       </nav>
+      <div class="header-info">
+        <button class="map-style-toggle" @click="store.toggleMapStyle()" :title="store.mapStyle === 'dark' ? '切换浅色底图' : '切换深色底图'">
+          <span v-if="store.mapStyle === 'dark'" class="toggle-icon">☀</span>
+          <span v-else class="toggle-icon">🌙</span>
+        </button>
+        <span class="badge live">● 数据大屏</span>
+      </div>
     </header>
 
     <section v-if="showTimeline" class="timeline-bar">
@@ -24,43 +31,57 @@
       <span class="hour-value">{{ store.selectedHour }}:00</span>
     </section>
 
-    <main class="page-content">
-      <router-view />
+    <main class="dash-main">
+      <RouterView v-slot="{ Component }">
+        <KeepAlive>
+          <component :is="Component" />
+        </KeepAlive>
+      </RouterView>
     </main>
   </div>
 </template>
 
 <script setup>
 import { computed } from 'vue'
+import { RouterLink, RouterView } from 'vue-router'
 import { useRoute } from 'vue-router'
 import { useDashboardStore } from '@/stores/dashboardStore'
+
 const store = useDashboardStore()
 const route = useRoute()
 const showTimeline = computed(() => route.path !== '/trend')
+
+const tabs = [
+  { path: '/congestion', label: '拥堵热力' },
+  { path: '/trend', label: '趋势对比' },
+  { path: '/hotspot', label: '热点地图' },
+  { path: '/driver', label: '司机画像' },
+  { path: '/catalog', label: '数据资产' },
+  { path: '/lineage', label: '数据血缘' },
+]
 </script>
 
 <style scoped>
-.dashboard-layout {
+.dash-layout {
   display: flex;
   flex-direction: column;
   width: 100%;
   height: 100vh;
-  background: #0a0e1a;
-  color: #fff;
 }
 
-.top-nav {
+.dash-header {
   display: flex;
+  justify-content: space-between;
   align-items: center;
-  gap: 24px;
   padding: 10px 24px;
   background: rgba(10, 14, 26, 0.95);
   border-bottom: 1px solid rgba(0, 204, 255, 0.2);
-  flex-shrink: 0;
   z-index: 100;
+  flex-shrink: 0;
+  gap: 16px;
 }
 
-.nav-brand {
+.title {
   font-size: 18px;
   font-weight: 600;
   color: #0cf;
@@ -68,28 +89,78 @@ const showTimeline = computed(() => route.path !== '/trend')
   white-space: nowrap;
 }
 
-.nav-tabs {
+.dash-nav {
   display: flex;
   gap: 4px;
+  flex: 1;
+  justify-content: center;
 }
 
 .nav-tab {
-  padding: 6px 16px;
-  font-size: 14px;
   color: rgba(255, 255, 255, 0.6);
   text-decoration: none;
-  border-radius: 6px;
+  font-size: 13px;
+  padding: 6px 14px;
+  border-radius: 16px;
+  border: 1px solid transparent;
+  background: rgba(255, 255, 255, 0.04);
   transition: all 0.2s;
+  white-space: nowrap;
 }
 
 .nav-tab:hover {
-  color: #fff;
-  background: rgba(0, 204, 255, 0.1);
+  color: rgba(255, 255, 255, 0.85);
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .nav-tab.active {
   color: #0cf;
+  border-color: rgba(0, 204, 255, 0.35);
+  background: rgba(0, 204, 255, 0.1);
+}
+
+.header-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.map-style-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 14px;
+  border: 1px solid rgba(0, 204, 255, 0.2);
+  background: rgba(0, 204, 255, 0.06);
+  cursor: pointer;
+  transition: all 0.2s;
+  padding: 0;
+}
+
+.map-style-toggle:hover {
   background: rgba(0, 204, 255, 0.15);
+  border-color: rgba(0, 204, 255, 0.4);
+}
+
+.toggle-icon {
+  font-size: 14px;
+  line-height: 1;
+}
+
+.badge {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.5);
+  padding: 4px 10px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.badge.live {
+  color: #0f0;
+  background: rgba(0, 255, 0, 0.08);
 }
 
 .timeline-bar {
@@ -142,9 +213,10 @@ const showTimeline = computed(() => route.path !== '/trend')
   min-width: 40px;
 }
 
-.page-content {
+.dash-main {
   flex: 1;
-  overflow: hidden;
+  position: relative;
+  overflow-y: auto;
   min-height: 0;
 }
 </style>

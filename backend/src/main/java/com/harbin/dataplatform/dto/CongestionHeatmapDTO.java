@@ -8,6 +8,7 @@ import lombok.Data;
 public class CongestionHeatmapDTO {
     private Long roadSegmentId;
     private String roadName;
+    private String roadType;
     private Double avgSpeedKmh;
     private Double congestionIndex;
     private Double deviationPct;

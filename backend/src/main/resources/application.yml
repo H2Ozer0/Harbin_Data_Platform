@@ -1,13 +1,13 @@
 server:
-  port: 8081
+  port: 8082
   servlet:
     context-path: /api
 
 spring:
   datasource:
-    url: jdbc:postgresql://101.35.234.65:5432/postgres
-    username: osmuser
-    password: pass
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/postgres}
+    username: ${DB_USER:postgres}
+    password: ${DB_PASS:postgres}
     driver-class-name: org.postgresql.Driver
     hikari:
       maximum-pool-size: 20
