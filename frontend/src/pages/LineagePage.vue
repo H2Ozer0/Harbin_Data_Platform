@@ -30,7 +30,18 @@
               {{ trajectoryLoading ? '加载中...' : '显示轨迹' }}
             </button>
             <button type="button" class="btn btn-sm" @click="resetGraphView">重置视图</button>
-          </div></div>
+            <button v-if="selectedNodeId" type="button" class="btn btn-sm btn-warn" @click="clearSelection">清除选择</button>
+          </div>
+        </div>
+
+        <!-- 血缘追踪信息栏 -->
+        <div v-if="selectedNodeId" class="lineage-info-bar">
+          <span class="info-tag info-tag-selected">选中: {{ selectedNodeId }}</span>
+          <span class="info-tag info-tag-upstream">上游: {{ upstreamIds.size }} 个表</span>
+          <span class="info-tag info-tag-downstream">下游: {{ downstreamIds.size }} 个表</span>
+          <span class="info-hint">追溯影响范围与数据异常时可点击节点查看上下游</span>
+        </div>
+
         <div class="lineage-graph" v-if="lineageData.nodes.length > 0"
              @wheel.prevent="onGraphWheel">
           <svg :width="graphLayout.width * zoom" :height="graphLayout.height * zoom" class="lineage-svg"
@@ -38,14 +49,20 @@
             <!-- 箭头标记 -->
             <defs>
               <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
-                <polygon points="0 0, 10 3.5, 0 7" fill="rgba(0, 204, 255, 0.5)" />
+                <polygon points="0 0, 10 3.5, 0 7" fill="rgba(120, 200, 255, 0.6)" />
+              </marker>
+              <marker id="arrowhead-upstream" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+                <polygon points="0 0, 10 3.5, 0 7" fill="#3B82F6" />
+              </marker>
+              <marker id="arrowhead-downstream" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+                <polygon points="0 0, 10 3.5, 0 7" fill="#22C55E" />
               </marker>
             </defs>
 
             <!-- 层列标题 -->
             <g v-for="col in graphLayout.columns" :key="'col-' + col.layer">
-              <text :x="col.x + nodeWidth / 2" :y="20" class="column-title">{{ col.layer }} 层</text>
-              <line :x1="col.x + nodeWidth / 2" :y1="28" :x2="col.x + nodeWidth / 2" :y2="graphLayout.height - 10" class="column-guide" />
+              <text :x="col.x + nodeWidth / 2" :y="18" class="column-title">{{ col.layer }} 层</text>
+              <line :x1="col.x + nodeWidth / 2" :y1="26" :x2="col.x + nodeWidth / 2" :y2="graphLayout.height - 10" class="column-guide" />
             </g>
 
             <!-- 曲线连线 -->
@@ -54,10 +71,13 @@
               :key="'edge-' + edge.source + '-' + edge.target"
               :d="getEdgePath(edge)"
               class="edge-line"
+              :class="getEdgeClass(edge)"
+              :marker-end="getEdgeMarker(edge)"
             />
 
             <!-- 连线标签 -->
-            <g v-for="edge in displayedEdges" :key="'elabel-' + edge.source + '-' + edge.target">
+            <g v-for="edge in displayedEdges" :key="'elabel-' + edge.source + '-' + edge.target"
+               :class="{ 'edge-label-dimmed': selectedNodeId && !isEdgeHighlighted(edge) }">
               <rect
                 class="edge-label-bg"
                 :x="getEdgeLabelPos(edge).x - 36"
@@ -75,63 +95,98 @@
               </text>
             </g>
 
-            <!-- 节点 -->
+            <!-- 节点卡片 -->
             <g
               v-for="node in displayedNodes"
               :key="'node-' + node.id"
               class="node"
-              :class="{
-                'node-source': isTrajectorySource(node.id),
-                'node-ods': node.layer === 'ODS',
-                'node-dw': node.layer === 'DW',
-                'node-tdm': node.layer === 'TDM',
-                'node-ads': node.layer === 'ADS',
-              }"
+              :class="getNodeClasses(node)"
               @click="selectNode(node)"
             >
+              <!-- 卡片背景 -->
               <rect
-                class="node-rect"
+                class="node-body"
                 :x="getNodePos(node.id).x"
                 :y="getNodePos(node.id).y"
                 :width="nodeWidth"
-                :height="nodeHeight"
-                :style="{ stroke: getLayerStrokeColor(node.layer) }"
+                :height="nodeHeightMap[node.id] || 60"
+                rx="6"
               />
-              <!-- 层标签 -->
+              <!-- 顶部色条 -->
               <rect
-                class="node-layer-badge"
-                :x="getNodePos(node.id).x + 4"
-                :y="getNodePos(node.id).y + 3"
-                :width="28"
-                :height="12"
+                class="node-header"
+                :x="getNodePos(node.id).x"
+                :y="getNodePos(node.id).y"
+                :width="nodeWidth"
+                :height="4"
+                rx="2"
+                :fill="getNodeColor(node)"
+              />
+              <!-- 层级徽章 -->
+              <rect
+                :x="getNodePos(node.id).x + 8"
+                :y="getNodePos(node.id).y + 10"
+                width="30"
+                height="14"
                 rx="3"
-                :style="{ fill: getLayerStrokeColor(node.layer) }"
+                :fill="getNodeColor(node)"
+                opacity="0.85"
               />
               <text
-                :x="getNodePos(node.id).x + 18"
-                :y="getNodePos(node.id).y + 11"
-                class="badge-text"
+                :x="getNodePos(node.id).x + 23"
+                :y="getNodePos(node.id).y + 20"
+                class="layer-badge-text"
               >{{ node.layer }}</text>
               <!-- 中文标签 -->
               <text
-                :x="getNodePos(node.id).x + nodeWidth / 2"
-                :y="getNodePos(node.id).y + 22"
-                class="node-label"
+                :x="getNodePos(node.id).x + 44"
+                :y="getNodePos(node.id).y + 20"
+                class="node-label-text"
               >{{ node.label }}</text>
-              <!-- 表名 -->
+              <!-- 技术表名 -->
               <text
-                :x="getNodePos(node.id).x + nodeWidth / 2"
-                :y="getNodePos(node.id).y + 34"
-                class="node-table-name"
+                :x="getNodePos(node.id).x + 8"
+                :y="getNodePos(node.id).y + 35"
+                class="node-id-text"
               >{{ node.id }}</text>
-              <!-- 行数 -->
-              <text
-                :x="getNodePos(node.id).x + nodeWidth / 2"
-                :y="getNodePos(node.id).y + 46"
-                class="node-meta"
-              >{{ formatNumber(node.rowCount) }} 行 · {{ node.fieldCount || 0 }} 字段</text>
+
+              <!-- 有列信息时显示列 -->
+              <template v-if="node.columns && node.columns.length > 0">
+                <text
+                  v-for="(col, ci) in getDisplayColumns(node)"
+                  :key="'col-' + col"
+                  :x="getNodePos(node.id).x + 10"
+                  :y="getNodePos(node.id).y + 50 + ci * columnRowHeight"
+                  class="column-item"
+                >{{ col }}</text>
+                <text
+                  v-if="node.columns.length > maxDisplayColumns"
+                  :x="getNodePos(node.id).x + 10"
+                  :y="getNodePos(node.id).y + 50 + maxDisplayColumns * columnRowHeight"
+                  class="column-more"
+                >+{{ node.columns.length - maxDisplayColumns }} more</text>
+              </template>
+              <!-- 无列信息时显示元数据 -->
+              <template v-else>
+                <text
+                  :x="getNodePos(node.id).x + nodeWidth / 2"
+                  :y="getNodePos(node.id).y + 54"
+                  class="node-meta"
+                >{{ formatNumber(node.rowCount) }} 行 · {{ node.fieldCount || 0 }} 字段</text>
+              </template>
             </g>
           </svg>
+
+          <!-- 图例 -->
+          <div class="graph-legend">
+            <span class="legend-item"><span class="legend-dot" style="background:#E040FB"></span>ODS 原始层</span>
+            <span class="legend-item"><span class="legend-dot" style="background:#66BB6A"></span>DW 仓库层</span>
+            <span class="legend-item"><span class="legend-dot" style="background:#FFD740"></span>TDM 模型层</span>
+            <span class="legend-item"><span class="legend-dot" style="background:#26C6DA"></span>ADS 应用层</span>
+            <span class="legend-item"><span class="legend-dot" style="background:#F59E0B"></span>当前选中</span>
+            <span class="legend-sep">|</span>
+            <span class="legend-hint">点击节点追溯上下游血缘</span>
+          </div>
 
           <div class="graph-zoom-hint">滚轮缩放 · 缩放 {{ Math.round(zoom * 100) }}%</div>
 
@@ -187,17 +242,22 @@
       </div>
     </div>
 
-    <!-- 轨迹查询结果（直接展示） -->
+    <!-- 轨迹查询结果（地图展示） -->
     <div v-if="showTrajectoryPanel" class="trajectory-section">
       <div class="section-header">
-        <h3>轨迹查询{{ selectedNode?.label ? '：' + selectedNode.label : '' }}</h3>
-        <button type="button" class="btn btn-sm" @click="closeTrajectory">关闭</button>
+        <h3>轨迹查询{{ selectedTrajectoryNode?.label ? '：' + selectedTrajectoryNode.label : '' }}</h3>
+        <div class="actions">
+          <button type="button" class="btn btn-sm" :disabled="trajectoryLoading" @click="() => loadTrajectory()">
+            {{ trajectoryLoading ? '加载中...' : '刷新轨迹' }}
+          </button>
+          <button type="button" class="btn btn-sm" @click="closeTrajectory">关闭</button>
+        </div>
       </div>
       <div class="trajectory-body">
         <div class="trajectory-info">
           <div class="info-item">
             <span class="info-label">源节点</span>
-            <span class="info-value">{{ selectedNode?.label || selectedNode?.id || '无' }}</span>
+            <span class="info-value">{{ selectedTrajectoryNode?.label || selectedTrajectoryNode?.id || '无' }}</span>
           </div>
           <div class="info-item">
             <span class="info-label">时间窗</span>
@@ -205,7 +265,7 @@
           </div>
           <div class="info-item">
             <span class="info-label">节点行数</span>
-            <span class="info-value">{{ formatNumber(selectedNode?.rowCount) }}</span>
+            <span class="info-value">{{ formatNumber(selectedTrajectoryNode?.rowCount) }}</span>
           </div>
           <div class="info-item">
             <span class="info-label">轨迹点数</span>
@@ -213,43 +273,11 @@
           </div>
         </div>
         <p v-if="trajectoryError" class="trajectory-error">{{ trajectoryError }}</p>
-        <div v-if="trajectoryPoints.length" class="trajectory-preview">
-          <div class="preview-caption">轨迹预览（绿=起，蓝=终）</div>
-          <svg
-            :viewBox="trajPreview.viewBox"
-            preserveAspectRatio="xMidYMid meet"
-            class="traj-svg"
-          >
-            <polyline
-              :points="trajPreview.polyline"
-              fill="none"
-              stroke="rgba(255, 170, 0, 0.9)"
-              stroke-width="2"
-              stroke-linejoin="round"
-            />
-            <circle
-              v-if="trajPreview.start"
-              :cx="trajPreview.start.x"
-              :cy="trajPreview.start.y"
-              r="5"
-              fill="#0f0"
-            />
-            <circle
-              v-if="trajPreview.end"
-              :cx="trajPreview.end.x"
-              :cy="trajPreview.end.y"
-              r="5"
-              fill="#0cf"
-            />
-          </svg>
+        <div v-if="trajectoryPoints.length" class="trajectory-map-wrapper">
+          <TrajectoryMap :points="trajectoryPoints" />
         </div>
-        <div class="map-placeholder">
-          <MapComponent
-            :show-legend="true"
-            legend-title="图例"
-            :legend-items="trajectoryLegendItems"
-            :show-controls="false"
-          />
+        <div v-else-if="!trajectoryLoading" class="trajectory-empty">
+          <p>暂无轨迹数据。请确认数据库已连接，且时间范围（2015-01-03 至 2015-01-07）内有数据。</p>
         </div>
       </div>
     </div>
@@ -260,7 +288,8 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useDashboardStore } from '@/stores/dashboardStore'
 import { dashboardApi } from '@/services/dashboardApi'
-import MapComponent from '@/components/MapComponent.vue'
+import { fetchTrajectorySlice } from '@/services/api'
+import TrajectoryMap from '@/components/TrajectoryMap.vue'
 
 const store = useDashboardStore()
 
@@ -273,32 +302,34 @@ const layers = [
 ]
 
 const layerOrder = ['ODS', 'DW', 'TDM', 'ADS']
-const layerStrokeColors = { ODS: '#f0f', DW: '#0f0', TDM: '#ff0', ADS: '#0cf' }
 
-const nodeWidth = 160
-const nodeHeight = 62
-const nodeGapY = 20
-const columnGap = 50
+// --- 节点尺寸常量 ---
+const nodeWidth = 200
+const nodeHeaderHeight = 30
+const columnRowHeight = 16
+const maxDisplayColumns = 6
+const nodeBottomPadding = 8
+const nodeGapY = 16
+const columnGap = 100
 const headerHeight = 30
-const padX = 16
-const padY = 8
+const padX = 30
+const padY = 15
 
+// --- 响应式状态 ---
 const lineageData = ref({ nodes: [], edges: [] })
 const qualityTables = ref([])
 const trajectoryPoints = ref([])
 const loading = ref(false)
 const trajectoryLoading = ref(false)
 const trajectoryError = ref('')
-const selectedNode = ref(null)
+const selectedTrajectoryNode = ref(null)
 const showTrajectoryPanel = ref(false)
+
+// --- 血缘追踪状态 ---
+const selectedNodeId = ref(null)
 
 // 图缩放
 const zoom = ref(1)
-
-const trajectoryLegendItems = [
-  { label: '起', color: '#00ff00' },
-  { label: '途径点', color: 'rgba(0, 204, 255, 0.6)' },
-]
 
 onMounted(async () => {
   await loadLineage()
@@ -345,7 +376,7 @@ async function loadODSSchema() {
   }
 }
 
-/** 根据点击节点来获取轨迹；不选 tableId（ODS 节点 id）则默认第一个 ODS 节点 */
+/** 根据点击节点来获取轨迹；调用真实 taxi/trajectory 接口 */
 async function loadTrajectory(tableId) {
   trajectoryError.value = ''
   trajectoryLoading.value = true
@@ -353,26 +384,20 @@ async function loadTrajectory(tableId) {
     const date = store.selectedDate || '2015-01-05'
     const startTime = `${date}T00:00:00`
     const endTime = `${date}T23:59:59`
-    const body = {
-      startTime,
-      endTime,
-      limit: 100,
+
+    const points = await fetchTrajectorySlice(startTime, endTime, {
       minLon: 126.0,
       maxLon: 127.2,
       minLat: 45.4,
       maxLat: 46.2,
-    }
-    if (tableId) {
-      body.deviceId = String(tableId)
-    }
+    })
 
-    const data = await dashboardApi.getTrajectory(body)
-    trajectoryPoints.value = Array.isArray(data?.points) ? data.points : []
+    trajectoryPoints.value = Array.isArray(points) ? points : []
 
     if (tableId) {
-      selectedNode.value = lineageData.value.nodes.find((n) => n.id === tableId) || selectedNode.value
-    } else if (!selectedNode.value) {
-      selectedNode.value =
+      selectedTrajectoryNode.value = lineageData.value.nodes.find((n) => n.id === tableId) || selectedTrajectoryNode.value
+    } else if (!selectedTrajectoryNode.value) {
+      selectedTrajectoryNode.value =
         lineageData.value.nodes.find((n) => n.layer === 'ODS') ||
         lineageData.value.nodes[0] ||
         null
@@ -381,7 +406,7 @@ async function loadTrajectory(tableId) {
     showTrajectoryPanel.value = true
     if (trajectoryPoints.value.length === 0) {
       trajectoryError.value =
-        '当前所选时间窗口没有轨迹点。建议日期范围为 2015-01-03至2015-01-07，并在第二层（ODS）节点点击后重试。'
+        '当前所选时间窗口没有轨迹点。建议日期范围为 2015-01-03 至 2015-01-07，并确认数据库中有 ods_taxi_trips_raw 数据。'
     }
   } catch (error) {
     console.error('Failed to load trajectory:', error)
@@ -401,37 +426,6 @@ const trajectoryTimeLabel = computed(() => {
   return `${date} 00:00:00 至 ${date} 23:59:59`
 })
 
-const trajPreview = computed(() => {
-  const pts = trajectoryPoints.value.filter((p) => p.lon != null && p.lat != null)
-  if (!pts.length) {
-    return { viewBox: '0 0 400 220', polyline: '', start: null, end: null }
-  }
-  const lons = pts.map((p) => p.lon)
-  const lats = pts.map((p) => p.lat)
-  const minLon = Math.min(...lons)
-  const maxLon = Math.max(...lons)
-  const minLat = Math.min(...lats)
-  const maxLat = Math.max(...lats)
-  const dLon = Math.max(maxLon - minLon, 0.008)
-  const dLat = Math.max(maxLat - minLat, 0.008)
-  const W = 400
-  const H = 220
-  const pad = 16
-  const innerW = W - pad * 2
-  const innerH = H - pad * 2
-  const toX = (lon) => pad + ((lon - minLon) / dLon) * innerW
-  const toY = (lat) => pad + innerH - ((lat - minLat) / dLat) * innerH
-  const polyline = pts.map((p) => `${toX(p.lon)},${toY(p.lat)}`).join(' ')
-  const first = pts[0]
-  const last = pts[pts.length - 1]
-  return {
-    viewBox: `0 0 ${W} ${H}`,
-    polyline,
-    start: { x: toX(first.lon), y: toY(first.lat) },
-    end: { x: toX(last.lon), y: toY(last.lat) },
-  }
-})
-
 const displayedNodes = computed(() => {
   if (store.selectedLayer === 'all') {
     return lineageData.value.nodes
@@ -444,6 +438,138 @@ const displayedEdges = computed(() => {
   return lineageData.value.edges.filter((e) => nodeIds.has(e.source) && nodeIds.has(e.target))
 })
 
+// === 血缘追踪: 上下游计算 ===
+
+function getUpstreamNodes(nodeId) {
+  const visited = new Set()
+  const queue = [nodeId]
+  while (queue.length > 0) {
+    const current = queue.shift()
+    for (const edge of lineageData.value.edges) {
+      if (edge.target === current && !visited.has(edge.source)) {
+        visited.add(edge.source)
+        queue.push(edge.source)
+      }
+    }
+  }
+  return visited
+}
+
+function getDownstreamNodes(nodeId) {
+  const visited = new Set()
+  const queue = [nodeId]
+  while (queue.length > 0) {
+    const current = queue.shift()
+    for (const edge of lineageData.value.edges) {
+      if (edge.source === current && !visited.has(edge.target)) {
+        visited.add(edge.target)
+        queue.push(edge.target)
+      }
+    }
+  }
+  return visited
+}
+
+const upstreamIds = computed(() => {
+  if (!selectedNodeId.value) return new Set()
+  return getUpstreamNodes(selectedNodeId.value)
+})
+
+const downstreamIds = computed(() => {
+  if (!selectedNodeId.value) return new Set()
+  return getDownstreamNodes(selectedNodeId.value)
+})
+
+function clearSelection() {
+  selectedNodeId.value = null
+}
+
+// === 节点高度计算 ===
+
+const nodeInfoHeight = 46 // badge + label + id area height
+
+function getNodeHeight(node) {
+  const cols = node.columns || []
+  if (cols.length === 0) {
+    return nodeInfoHeight + 16 + nodeBottomPadding
+  }
+  const displayCount = Math.min(cols.length, maxDisplayColumns)
+  const hasMore = cols.length > maxDisplayColumns
+  return nodeInfoHeight + 8 + displayCount * columnRowHeight + (hasMore ? columnRowHeight : 0) + nodeBottomPadding
+}
+
+const nodeHeightMap = computed(() => {
+  const map = {}
+  for (const node of displayedNodes.value) {
+    map[node.id] = getNodeHeight(node)
+  }
+  return map
+})
+
+function getDisplayColumns(node) {
+  if (!node.columns || node.columns.length === 0) return []
+  return node.columns.slice(0, maxDisplayColumns)
+}
+
+// === 节点颜色 ===
+
+const layerColors = {
+  ODS: '#E040FB',
+  DW: '#66BB6A',
+  TDM: '#FFD740',
+  ADS: '#26C6DA',
+}
+
+function getNodeColor(node) {
+  if (!selectedNodeId.value) {
+    return layerColors[node.layer] || '#3B82F6'
+  }
+  if (node.id === selectedNodeId.value) return '#F59E0B'
+  if (upstreamIds.value.has(node.id)) return '#3B82F6'
+  if (downstreamIds.value.has(node.id)) return '#22C55E'
+  return layerColors[node.layer] || '#3B82F6'
+}
+
+function getNodeClasses(node) {
+  if (!selectedNodeId.value) return {}
+  return {
+    'node-selected': node.id === selectedNodeId.value,
+    'node-upstream': upstreamIds.value.has(node.id),
+    'node-downstream': downstreamIds.value.has(node.id),
+    'node-dimmed': node.id !== selectedNodeId.value &&
+      !upstreamIds.value.has(node.id) && !downstreamIds.value.has(node.id),
+  }
+}
+
+function getEdgeClass(edge) {
+  if (!selectedNodeId.value) return {}
+  const isUp = edge.target === selectedNodeId.value || upstreamIds.value.has(edge.target) && (edge.source === selectedNodeId.value || upstreamIds.value.has(edge.source))
+  const isDown = edge.source === selectedNodeId.value || downstreamIds.value.has(edge.source) && (edge.target === selectedNodeId.value || downstreamIds.value.has(edge.target))
+  return {
+    'edge-upstream': isUp && !isDown,
+    'edge-downstream': isDown && !isUp,
+    'edge-highlighted': isUp || isDown,
+    'edge-dimmed': !isUp && !isDown,
+  }
+}
+
+function isEdgeHighlighted(edge) {
+  if (!selectedNodeId.value) return true
+  const allHighlighted = new Set([selectedNodeId.value, ...upstreamIds.value, ...downstreamIds.value])
+  return allHighlighted.has(edge.source) && allHighlighted.has(edge.target)
+}
+
+function getEdgeMarker(edge) {
+  if (!selectedNodeId.value) return 'url(#arrowhead)'
+  if (isEdgeHighlighted(edge)) {
+    const srcIsUp = upstreamIds.value.has(edge.source) || edge.source === selectedNodeId.value
+    const tgtIsDown = downstreamIds.value.has(edge.target) || edge.target === selectedNodeId.value
+    if (tgtIsDown && !srcIsUp) return 'url(#arrowhead-downstream)'
+    if (srcIsUp && !tgtIsDown) return 'url(#arrowhead-upstream)'
+  }
+  return 'url(#arrowhead)'
+}
+
 // === 布局计算 ===
 
 // 按层分组
@@ -455,22 +581,23 @@ const layerGroups = computed(() => {
   return groups
 })
 
-// 计算每列 x 坐标
+// 计算每列 x 坐标 + 总图高度（基于动态节点高度）
 const graphLayout = computed(() => {
   const activeLayers = layerOrder.filter((l) => (layerGroups.value[l] || []).length > 0)
   const columns = []
-  let maxNodesInColumn = 1
+  let maxHeight = 0
 
   for (let i = 0; i < activeLayers.length; i++) {
     const layer = activeLayers[i]
     const x = padX + i * (nodeWidth + columnGap)
     columns.push({ layer, x })
-    const count = (layerGroups.value[layer] || []).length
-    if (count > maxNodesInColumn) maxNodesInColumn = count
+
+    const nodes = layerGroups.value[layer] || []
+    const totalH = nodes.reduce((sum, n) => sum + (nodeHeightMap.value[n.id] || 60) + nodeGapY, -nodeGapY)
+    if (totalH > maxHeight) maxHeight = totalH
   }
 
-  const contentHeight = maxNodesInColumn * (nodeHeight + nodeGapY) - nodeGapY
-  const totalHeight = headerHeight + contentHeight + padY * 2
+  const totalHeight = headerHeight + maxHeight + padY * 2
   const totalWidth = activeLayers.length * (nodeWidth + columnGap) - columnGap + padX * 2
 
   return {
@@ -490,24 +617,28 @@ function getNodePos(nodeId) {
   if (!col) return { x: 0, y: 0 }
 
   const siblings = layerGroups.value[node.layer] || []
-  const index = siblings.findIndex((n) => n.id === nodeId)
-  const totalHeight = siblings.length * (nodeHeight + nodeGapY) - nodeGapY
+  const totalHeight = siblings.reduce((sum, n) => sum + (nodeHeightMap.value[n.id] || 60) + nodeGapY, -nodeGapY)
   const startY = headerHeight + padY + (graphLayout.value.height - headerHeight - padY * 2 - totalHeight) / 2
 
-  return {
-    x: col.x,
-    y: startY + index * (nodeHeight + nodeGapY),
+  let y = startY
+  for (const n of siblings) {
+    if (n.id === nodeId) return { x: col.x, y }
+    y += (nodeHeightMap.value[n.id] || 60) + nodeGapY
   }
+
+  return { x: col.x, y: startY }
 }
 
 // 贝塞尔曲线路径
 function getEdgePath(edge) {
   const srcPos = getNodePos(edge.source)
   const tgtPos = getNodePos(edge.target)
+  const srcH = nodeHeightMap.value[edge.source] || 60
+  const tgtH = nodeHeightMap.value[edge.target] || 60
   const x1 = srcPos.x + nodeWidth
-  const y1 = srcPos.y + nodeHeight / 2
+  const y1 = srcPos.y + srcH / 2
   const x2 = tgtPos.x
-  const y2 = tgtPos.y + nodeHeight / 2
+  const y2 = tgtPos.y + tgtH / 2
   const dx = (x2 - x1) * 0.5
   return `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`
 }
@@ -515,17 +646,21 @@ function getEdgePath(edge) {
 function getEdgeLabelPos(edge) {
   const srcPos = getNodePos(edge.source)
   const tgtPos = getNodePos(edge.target)
+  const srcH = nodeHeightMap.value[edge.source] || 60
+  const tgtH = nodeHeightMap.value[edge.target] || 60
   return {
     x: (srcPos.x + nodeWidth + tgtPos.x) / 2,
-    y: (srcPos.y + nodeHeight / 2 + tgtPos.y + nodeHeight / 2) / 2,
+    y: (srcPos.y + srcH / 2 + tgtPos.y + tgtH / 2) / 2,
   }
 }
 
-function getLayerStrokeColor(layer) {
-  return layerStrokeColors[layer] || '#0cf'
-}
-
 function selectNode(node) {
+  if (selectedNodeId.value === node.id) {
+    selectedNodeId.value = null
+  } else {
+    selectedNodeId.value = node.id
+  }
+  // 保留原有 ODS 轨迹加载行为
   if (node.layer === 'ODS') {
     loadTrajectory(node.id)
   }
@@ -646,6 +781,82 @@ h3 {
   margin: 0;
 }
 
+/* === 血缘信息栏 === */
+.lineage-info-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 16px;
+  background: rgba(245, 158, 11, 0.06);
+  border-bottom: 1px solid rgba(245, 158, 11, 0.15);
+}
+
+.info-tag {
+  padding: 2px 10px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.info-tag-selected {
+  background: rgba(245, 158, 11, 0.15);
+  color: #F59E0B;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.info-tag-upstream {
+  background: rgba(59, 130, 246, 0.15);
+  color: #60A5FA;
+  border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
+.info-tag-downstream {
+  background: rgba(34, 197, 94, 0.15);
+  color: #4ADE80;
+  border: 1px solid rgba(34, 197, 94, 0.3);
+}
+
+.info-hint {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.4);
+  margin-left: auto;
+}
+
+/* === 图例 === */
+.graph-legend {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 8px 16px;
+  background: rgba(0, 0, 0, 0.25);
+  border-top: 1px solid rgba(0, 204, 255, 0.06);
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.legend-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+}
+
+.legend-sep {
+  color: rgba(255, 255, 255, 0.15);
+}
+
+.legend-hint {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.3);
+}
+
+/* === 图形区域 === */
 .lineage-graph {
   position: relative;
   padding: 16px;
@@ -682,16 +893,35 @@ h3 {
   pointer-events: none;
 }
 
+/* === 边线 === */
 .edge-line {
-  stroke: rgba(0, 204, 255, 0.35);
+  stroke: rgba(120, 200, 255, 0.45);
   stroke-width: 1.5;
   fill: none;
   marker-end: url(#arrowhead);
-  transition: stroke 0.2s;
+  transition: stroke 0.2s, opacity 0.2s;
 }
 
 .edge-line:hover {
-  stroke: rgba(0, 204, 255, 0.7);
+  stroke: rgba(120, 200, 255, 0.8);
+}
+
+.edge-upstream {
+  stroke: #3B82F6;
+  stroke-width: 2;
+}
+
+.edge-downstream {
+  stroke: #22C55E;
+  stroke-width: 2;
+}
+
+.edge-dimmed {
+  opacity: 0.12;
+}
+
+.edge-label-dimmed {
+  opacity: 0.12;
 }
 
 .edge-label-bg {
@@ -707,63 +937,104 @@ h3 {
   dominant-baseline: middle;
 }
 
+/* === 节点卡片 === */
 .node {
   cursor: pointer;
 }
 
-.node-rect {
-  rx: 6;
-  fill: rgba(0, 204, 255, 0.06);
+.node-body {
+  fill: rgba(12, 18, 30, 0.95);
+  stroke: rgba(255, 255, 255, 0.08);
+  stroke-width: 1;
+  transition: fill 0.2s, stroke 0.2s, opacity 0.3s;
+}
+
+.node:hover .node-body {
+  fill: rgba(20, 28, 48, 0.95);
+  stroke: rgba(255, 255, 255, 0.2);
   stroke-width: 1.5;
-  transition: fill 0.2s, stroke-width 0.2s;
 }
 
-.node:hover .node-rect {
-  fill: rgba(0, 204, 255, 0.12);
-  stroke-width: 2;
+.node-header {
+  opacity: 0.9;
+  transition: fill 0.2s;
 }
 
-.node-source .node-rect {
-  fill: rgba(0, 255, 0, 0.08);
-  stroke: #0f0;
-  stroke-width: 2;
-}
-
-.node-layer-badge {
-  opacity: 0.85;
-}
-
-.badge-text {
-  fill: #000;
-  font-size: 7px;
-  font-weight: 700;
-  text-anchor: middle;
-  dominant-baseline: middle;
-}
-
-.node-label {
+.node-header-text {
   fill: #fff;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
-  text-anchor: middle;
-  dominant-baseline: middle;
-}
-
-.node-table-name {
-  fill: rgba(255, 255, 255, 0.45);
-  font-size: 7px;
   text-anchor: middle;
   dominant-baseline: middle;
   font-family: 'Courier New', monospace;
 }
 
+.layer-badge-text {
+  fill: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  text-anchor: middle;
+  dominant-baseline: middle;
+  letter-spacing: 0.5px;
+}
+
+.node-label-text {
+  fill: rgba(255, 255, 255, 0.9);
+  font-size: 12px;
+  font-weight: 600;
+  dominant-baseline: middle;
+}
+
+.node-id-text {
+  fill: rgba(255, 255, 255, 0.45);
+  font-size: 9px;
+  font-family: 'Courier New', monospace;
+}
+
+.column-item {
+  fill: rgba(255, 255, 255, 0.6);
+  font-size: 10px;
+  font-family: 'Courier New', monospace;
+}
+
+.column-more {
+  fill: rgba(255, 255, 255, 0.3);
+  font-size: 10px;
+  font-style: italic;
+}
+
 .node-meta {
   fill: rgba(255, 255, 255, 0.4);
-  font-size: 7px;
+  font-size: 10px;
   text-anchor: middle;
   dominant-baseline: middle;
 }
 
+/* === 选中/高亮状态 === */
+.node-selected .node-body {
+  stroke: #F59E0B;
+  stroke-width: 2.5;
+  filter: drop-shadow(0 0 8px rgba(245, 158, 11, 0.45));
+}
+
+.node-upstream .node-body {
+  stroke: #3B82F6;
+  stroke-width: 2;
+  filter: drop-shadow(0 0 5px rgba(59, 130, 246, 0.35));
+}
+
+.node-downstream .node-body {
+  stroke: #22C55E;
+  stroke-width: 2;
+  filter: drop-shadow(0 0 5px rgba(34, 197, 94, 0.35));
+}
+
+.node-dimmed {
+  opacity: 0.18;
+  transition: opacity 0.3s;
+}
+
+/* === 加载 === */
 .loading-overlay {
   position: absolute;
   inset: 0;
@@ -795,6 +1066,7 @@ h3 {
   margin-top: 16px;
 }
 
+/* === 数据质量 === */
 .quality-cards {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
@@ -903,6 +1175,7 @@ h3 {
   font-family: 'Courier New', monospace;
 }
 
+/* === 按钮 === */
 .btn {
   padding: 8px 16px;
   background: rgba(0, 204, 255, 0.2);
@@ -928,6 +1201,17 @@ h3 {
   cursor: not-allowed;
 }
 
+.btn-warn {
+  background: rgba(245, 158, 11, 0.2);
+  border-color: rgba(245, 158, 11, 0.4);
+  color: #F59E0B;
+}
+
+.btn-warn:hover {
+  background: rgba(245, 158, 11, 0.3);
+}
+
+/* === 轨迹面板 === */
 .trajectory-section {
   background: rgba(0, 204, 255, 0.03);
   border-radius: 8px;
@@ -975,26 +1259,18 @@ h3 {
   border-radius: 6px;
 }
 
-.trajectory-preview {
-  margin-bottom: 16px;
+.trajectory-map-wrapper {
+  margin-top: 12px;
 }
 
-.preview-caption {
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.55);
-  margin-bottom: 8px;
+.trajectory-empty {
+  padding: 32px;
+  text-align: center;
 }
 
-.traj-svg {
-  width: 100%;
-  height: 200px;
-  display: block;
-  background: rgba(0, 0, 0, 0.35);
-  border-radius: 8px;
-  border: 1px solid rgba(0, 204, 255, 0.15);
-}
-
-.map-placeholder {
-  min-height: 140px;
+.trajectory-empty p {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 13px;
+  margin: 0;
 }
 </style>

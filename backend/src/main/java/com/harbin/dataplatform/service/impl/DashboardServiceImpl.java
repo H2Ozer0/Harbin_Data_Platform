@@ -447,6 +447,7 @@ public class DashboardServiceImpl implements DashboardService {
 
             long rowCount = 0;
             int fieldCount = 0;
+            List<String> columns = List.of();
             try {
                 rowCount = jdbcTemplate.queryForObject(
                         "SELECT COUNT(*) FROM " + schema + "." + table, Long.class);
@@ -456,13 +457,18 @@ public class DashboardServiceImpl implements DashboardService {
                         "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=? AND table_name=?",
                         Integer.class, schema, table);
             } catch (Exception ignored) {}
+            try {
+                columns = getTableColumns(schema, table);
+            } catch (Exception ignored) {}
 
             nodes.add(LineageNodeDTO.builder()
                     .id(table)
                     .label(formatTableLabel(schema, table))
                     .layer(getLayerName(schema))
+                    .schema(schema)
                     .rowCount(rowCount)
                     .fieldCount(fieldCount)
+                    .columns(columns)
                     .build());
         }
 
