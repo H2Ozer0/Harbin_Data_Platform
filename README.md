@@ -89,7 +89,10 @@ ODS（原始层）
   └─ ods_taxi_trips_raw          120万行 GPS 轨迹
        │
        ├──ETL聚合──→ DW（维度建模层）
-       │              └─ fact_congestion_seg_hour    134万行
+       │               ├─ dim_time_slot/dim_calendar/dim_road_segment/dim_grid
+       │               ├─ fact_congestion_seg_hour  
+       │               ├─ fact_trip_event_grid_hour
+       │               └─ fact_driver_activity_hour
        │                    │
        │                    └──5天窗口──→ TDM（算法模型层）
        │                                    ├─ congestion_baseline_5day   83万行
