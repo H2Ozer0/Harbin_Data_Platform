@@ -16,6 +16,18 @@
           <button :class="{ active: eventType === 'dropoff' }" @click="eventType = 'dropoff'">&#19979;&#36710;&#28909;&#28857;</button>
         </div>
       </div>
+      <div class="control-group scale-block">
+        <label>热力色标</label>
+        <div class="toggle">
+          <button :class="{ active: heatScaleMode === 'relative' }" type="button" @click="heatScaleMode = 'relative'">相对本屏</button>
+          <button :class="{ active: heatScaleMode === 'fixed' }" type="button" @click="heatScaleMode = 'fixed'">固定标尺</button>
+        </div>
+        <div v-if="heatScaleMode === 'fixed'" class="fixed-max-row">
+          <span>上限（事件数）</span>
+          <input v-model.number="fixedWeightMax" type="number" min="1" step="50" class="fixed-max-input" />
+        </div>
+        
+      </div>
       <div class="control-group">
         <button class="primary" @click="loadData" :disabled="loading">&#21047;&#26032;</button>
       </div>
@@ -30,6 +42,9 @@
         <DashboardMap
           :heatmap-points="heatmapPoints"
           heatmap-weight-key="weight"
+          :heatmap-use-raw-weight="heatScaleMode === 'relative'"
+          :heatmap-color-domain="heatScaleMode === 'fixed' ? [0, 1] : undefined"
+          :heatmap-render-key="hotspotHeatmapRenderKey"
           :scatter-points="heatmapPoints.slice(0, 200)"
           :scatter-radius="5"
           :tooltip-formatter="formatTooltip"
@@ -79,6 +94,9 @@ import { fetchHotspotMap } from '@/services/dashboardApi'
 const dt = ref('2015-01-05')
 const hour = ref(8)
 const eventType = ref('pickup')
+/** relative：本小时点集 min–max；fixed：0～fixedWeightMax，便于换日/换小时对比 */
+const heatScaleMode = ref('relative')
+const fixedWeightMax = ref(400)
 const loading = ref(false)
 const error = ref('')
 const grids = ref([])
@@ -87,12 +105,39 @@ const totalGrids = ref(0)
 const chartRef = ref(null)
 let chart = null
 
-const heatmapPoints = computed(() =>
-  grids.value.map(g => ({
-    ...g,
-    weight: g.eventCount ?? g.hotspotScore ?? 1,
-  }))
+/** 用于 deck 强制刷新：口径、上限、查询条件任一变化即变 */
+const hotspotHeatmapRenderKey = computed(
+  () => `${heatScaleMode.value}-${fixedWeightMax.value}-${dt.value}-${hour.value}-${eventType.value}`,
 )
+
+/**
+ * relative：weight 为原始事件数（热力层视口自适应色带）。
+ * fixed：weight 为 clamp(事件数/上限, 0, 1)，配合 HeatmapLayer colorDomain [0,1] + MEAN。
+ */
+const heatmapPoints = computed(() => {
+  const list = grids.value
+  if (!list.length) return []
+  const counts = list.map(g => {
+    const v = g.eventCount ?? g.hotspotScore
+    return Number.isFinite(Number(v)) ? Number(v) : null
+  })
+
+  if (heatScaleMode.value === 'fixed') {
+    const cap = Number(fixedWeightMax.value)
+    const max = Number.isFinite(cap) && cap > 0 ? cap : 800
+    return list.map((g, i) => {
+      const c = counts[i]
+      const weight = c == null ? 0 : Math.min(1, Math.max(0, c / max))
+      return { ...g, weight }
+    })
+  }
+
+  return list.map((g, i) => {
+    const c = counts[i]
+    const weight = c == null ? 0 : c
+    return { ...g, weight }
+  })
+})
 
 const topGrids = computed(() => {
   const list = [...grids.value]
@@ -257,6 +302,33 @@ onUnmounted(() => {
 .toggle button.active {
   background: rgba(0, 204, 255, 0.3);
   color: #0cf;
+}
+
+.scale-block .fixed-max-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.fixed-max-input {
+  width: 88px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #fff;
+  padding: 4px 8px;
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.scale-note {
+  margin: 4px 0 0;
+  font-size: 11px;
+  line-height: 1.35;
+  color: rgba(255, 255, 255, 0.45);
+  max-width: 280px;
 }
 
 .primary:disabled {
