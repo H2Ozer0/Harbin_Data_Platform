@@ -58,6 +58,35 @@ const props = defineProps({
     type: Number,
     default: 0.01,
   },
+  /** 传入 [min,max] 时按固定区间映射；不传/undefined 时用当前点集 min–max */
+  heatmapWeightDomain: {
+    default: undefined,
+    validator: (v) =>
+      v === undefined ||
+      v === null ||
+      (Array.isArray(v) && v.length === 2 && Number.isFinite(Number(v[0])) && Number.isFinite(Number(v[1]))),
+  },
+  /**
+   * 传入 [min,max] 时启用 HeatmapLayer 固定色域（deck.gl colorDomain），与 aggregation: MEAN 配合，
+   * 用于「固定标尺」可比色带；不传则走默认（视口内自动拉伸，渐变柔和）。
+   */
+  heatmapColorDomain: {
+    default: undefined,
+    validator: (v) =>
+      v === undefined ||
+      v === null ||
+      (Array.isArray(v) && v.length === 2 && Number.isFinite(Number(v[0])) && Number.isFinite(Number(v[1]))),
+  },
+  /** 为 true 时 getWeight 直接用 heatmapWeightKey 原始值（如事件数），不在层内做 min–max（热点「相对本屏」） */
+  heatmapUseRawWeight: {
+    type: Boolean,
+    default: false,
+  },
+  /** 随口径/数据变化，用于 deck 图层 id 与 updateTriggers，避免聚合层不刷新 */
+  heatmapRenderKey: {
+    type: String,
+    default: '',
+  },
 })
 
 const containerRef = ref(null)
@@ -66,6 +95,15 @@ let overlay = null
 let resizeObserver = null
 
 const weightRange = computed(() => {
+  const domain = props.heatmapWeightDomain
+  if (domain != null && Array.isArray(domain) && domain.length === 2) {
+    const d0 = Number(domain[0])
+    const d1 = Number(domain[1])
+    if (Number.isFinite(d0) && Number.isFinite(d1) && d1 > d0) {
+      return [d0, d1]
+    }
+  }
+
   const points = props.heatmapPoints
   if (!points.length) return [1, 1]
   let min = Infinity
@@ -81,38 +119,104 @@ const weightRange = computed(() => {
   return [min, max > min ? max : min + 1]
 })
 
+const sharedColorRange = [
+  [0, 0, 255, 0],
+  [0, 128, 255, 90],
+  [0, 255, 255, 150],
+  [0, 255, 128, 210],
+  [255, 255, 0, 235],
+  [255, 128, 0, 250],
+  [255, 0, 0, 255],
+]
+
 function buildLayers() {
   const layers = []
 
   if (props.heatmapPoints.length > 0) {
-    const [wMin, wMax] = weightRange.value
-    const wSpan = wMax - wMin
+    const rk = props.heatmapRenderKey || 'default'
+    const cd = props.heatmapColorDomain
+    const hasColorDomain =
+      cd != null &&
+      Array.isArray(cd) &&
+      cd.length === 2 &&
+      Number.isFinite(Number(cd[0])) &&
+      Number.isFinite(Number(cd[1])) &&
+      Number(cd[1]) > Number(cd[0])
+    const c0 = hasColorDomain ? Number(cd[0]) : 0
+    const c1 = hasColorDomain ? Number(cd[1]) : 1
 
-    layers.push(
-      new HeatmapLayer({
-        id: 'heatmap-layer',
-        data: props.heatmapPoints,
-        getPosition: d => [d.lon, d.lat],
-        getWeight: d => {
-          const v = d[props.heatmapWeightKey]
-          const raw = Number.isFinite(v) ? v : 0
-          return wSpan > 0 ? (raw - wMin) / wSpan : 0.5
-        },
-        radiusPixels: props.heatmapRadiusPixels,
-        intensity: props.heatmapIntensity,
-        opacity: 0.75,
-        threshold: props.heatmapThreshold,
-        colorRange: [
-          [0, 0, 255, 0],
-          [0, 128, 255, 80],
-          [0, 255, 255, 140],
-          [0, 255, 128, 200],
-          [255, 255, 0, 230],
-          [255, 128, 0, 250],
-          [255, 0, 0, 255],
-        ],
-      })
-    )
+    if (hasColorDomain) {
+      layers.push(
+        new HeatmapLayer({
+          id: `heatmap-cd-${c0}-${c1}-${rk}-${props.heatmapPoints.length}`,
+          data: props.heatmapPoints,
+          getPosition: d => [d.lon, d.lat],
+          getWeight: d => {
+            const v = d[props.heatmapWeightKey]
+            const raw = Number.isFinite(v) ? v : 0
+            return Math.min(c1, Math.max(c0, raw))
+          },
+          aggregation: 'MEAN',
+          colorDomain: [c0, c1],
+          updateTriggers: {
+            getWeight: [c0, c1, rk, props.heatmapWeightKey],
+          },
+          radiusPixels: props.heatmapRadiusPixels,
+          intensity: props.heatmapIntensity,
+          opacity: 0.78,
+          threshold: props.heatmapThreshold,
+          colorRange: sharedColorRange,
+        }),
+      )
+    } else if (props.heatmapUseRawWeight) {
+      layers.push(
+        new HeatmapLayer({
+          id: `heatmap-raw-${rk}-${props.heatmapPoints.length}`,
+          data: props.heatmapPoints,
+          getPosition: d => [d.lon, d.lat],
+          getWeight: d => {
+            const v = d[props.heatmapWeightKey]
+            return Number.isFinite(v) ? Math.max(0, v) : 0
+          },
+          updateTriggers: {
+            getWeight: [rk, props.heatmapWeightKey, props.heatmapPoints.length],
+          },
+          radiusPixels: props.heatmapRadiusPixels,
+          intensity: props.heatmapIntensity,
+          opacity: 0.75,
+          threshold: props.heatmapThreshold,
+          colorRange: sharedColorRange,
+        }),
+      )
+    } else {
+      const [wMin, wMax] = weightRange.value
+      const wSpan = wMax - wMin
+
+      const getWeightFromRange = d => {
+        const v = d[props.heatmapWeightKey]
+        const raw = Number.isFinite(v) ? v : 0
+        if (wSpan <= 0) return 0.5
+        const t = (raw - wMin) / wSpan
+        return Math.min(1, Math.max(0, t))
+      }
+
+      layers.push(
+        new HeatmapLayer({
+          id: `heatmap-mm-${rk}-${props.heatmapPoints.length}`,
+          data: props.heatmapPoints,
+          getPosition: d => [d.lon, d.lat],
+          getWeight: getWeightFromRange,
+          updateTriggers: {
+            getWeight: [wMin, wMax, props.heatmapWeightKey, rk],
+          },
+          radiusPixels: props.heatmapRadiusPixels,
+          intensity: props.heatmapIntensity,
+          opacity: 0.75,
+          threshold: props.heatmapThreshold,
+          colorRange: sharedColorRange,
+        }),
+      )
+    }
   }
 
   if (props.scatterPoints.length > 0) {
@@ -193,7 +297,15 @@ function refreshLayers() {
 }
 
 watch(
-  () => [props.heatmapPoints, props.scatterPoints, props.heatmapWeightKey],
+  () => [
+    props.heatmapPoints,
+    props.scatterPoints,
+    props.heatmapWeightKey,
+    props.heatmapWeightDomain,
+    props.heatmapColorDomain,
+    props.heatmapUseRawWeight,
+    props.heatmapRenderKey,
+  ],
   () => {
     refreshLayers()
     if (map) {

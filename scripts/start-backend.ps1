@@ -7,7 +7,7 @@ param(
 $ErrorActionPreference = "Stop"
 $backendDir = Join-Path $PSScriptRoot "..\backend"
 $pidFile = Join-Path $backendDir "backend_pid.txt"
-$targetPort = 8081
+$targetPort = 8082
 
 Set-Location $backendDir
 
@@ -29,14 +29,23 @@ if ($Profile -ne "default") {
     $args += "-Dspring-boot.run.profiles=$Profile"
 }
 
-$proc = Start-Process mvn -ArgumentList $args -PassThru -WindowStyle Hidden
+$mvnw = Join-Path $backendDir "mvnw.cmd"
+if (Test-Path $mvnw) {
+    $mvnLauncher = $mvnw
+} elseif (Get-Command mvn -ErrorAction SilentlyContinue) {
+    $mvnLauncher = "mvn"
+} else {
+    throw "未找到 Maven：请安装 Maven 并加入 PATH，或使用项目自带的 backend\mvnw.cmd（应已随仓库提供）。"
+}
+
+$proc = Start-Process -FilePath $mvnLauncher -ArgumentList $args -WorkingDirectory $backendDir -PassThru -WindowStyle Hidden
 $proc.Id | Out-File -FilePath $pidFile -Encoding utf8 -Force
 
 $ready = $false
 $start = Get-Date
 while (((Get-Date) - $start).TotalSeconds -lt 90) {
     try {
-        $res = Invoke-WebRequest -UseBasicParsing -Uri "http://localhost:8081/api/map/boundary?page=0&size=1" -Method Get -TimeoutSec 5
+        $res = Invoke-WebRequest -UseBasicParsing -Uri "http://localhost:8082/api/map/boundary?page=0&size=1" -Method Get -TimeoutSec 5
         if ($res.StatusCode -eq 200) {
             $ready = $true
             break
