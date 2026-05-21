@@ -254,10 +254,12 @@ public class DashboardServiceImpl implements DashboardService {
 
     @Override
     public List<CatalogTableDTO> getCatalogTables() {
-        // 展示大屏数据链路中实际使用的 9 张表（ODS→DW→TDM→ADS）
+        // 展示大屏数据链路中实际使用的 11 张表（ODS→DW→TDM→ADS）
         String[][] displayTables = {
                 {"ods", "ods_taxi_trips_raw"},
                 {"dw", "fact_congestion_seg_hour"},
+                {"dw", "dim_road_segment"},
+                {"dw", "fact_trip_event_grid_hour"},
                 {"tdm", "congestion_baseline_5day"},
                 {"tdm", "driver_shift_pattern"},
                 {"tdm", "grid_hotspot_score"},
@@ -495,6 +497,8 @@ public class DashboardServiceImpl implements DashboardService {
                 {"ods", "ods_taxi_trips_raw"},
                 // DW
                 {"dw", "fact_congestion_seg_hour"},
+                {"dw", "dim_road_segment"},
+                {"dw", "fact_trip_event_grid_hour"},
                 // TDM
                 {"tdm", "congestion_baseline_5day"},
                 {"tdm", "driver_shift_pattern"},
@@ -586,15 +590,18 @@ public class DashboardServiceImpl implements DashboardService {
 
     private List<Map<String, Object>> buildBuiltinLineage() {
         String[][] rels = {
-                // P1: 拥堵链路 ODS → DW → TDM → ADS
+                // ODS → DW
                 {"ods", "ods_taxi_trips_raw", "dw", "fact_congestion_seg_hour", "ETL聚合"},
+                {"ods", "ods_taxi_trips_raw", "dw", "dim_road_segment", "地图匹配"},
+                {"ods", "ods_taxi_trips_raw", "dw", "fact_trip_event_grid_hour", "事件聚合"},
+                // DW → TDM
                 {"dw", "fact_congestion_seg_hour", "tdm", "congestion_baseline_5day", "5天滑动窗口"},
-                {"tdm", "congestion_baseline_5day", "ads", "congestion_by_segment_hour", "指标增强"},
-                // P2-热点链路 ODS → TDM → ADS
-                {"ods", "ods_taxi_trips_raw", "tdm", "grid_hotspot_score", "空间聚合"},
-                {"tdm", "grid_hotspot_score", "ads", "hotspot_grid_enriched", "字段丰富"},
-                // P2-司机链路 ODS → TDM → ADS
+                {"dw", "fact_trip_event_grid_hour", "tdm", "grid_hotspot_score", "空间聚合"},
+                // ODS → TDM（司机链路直接从原始轨迹提取）
                 {"ods", "ods_taxi_trips_raw", "tdm", "driver_shift_pattern", "模式识别"},
+                // TDM → ADS
+                {"tdm", "congestion_baseline_5day", "ads", "congestion_by_segment_hour", "指标增强"},
+                {"tdm", "grid_hotspot_score", "ads", "hotspot_grid_enriched", "字段丰富"},
                 {"tdm", "driver_shift_pattern", "ads", "driver_behavior_summary", "行为统计"},
                 {"tdm", "driver_shift_pattern", "ads", "driver_rest_enriched", "休息点推断"},
         };
@@ -624,9 +631,18 @@ public class DashboardServiceImpl implements DashboardService {
     private String formatTableLabel(String schema, String table) {
         return switch (schema) {
             case "ods" -> "GPS行程记录";
-            case "dw" -> "拥堵事实表";
+            case "dw" -> getDwLabel(table);
             case "tdm" -> getTdmLabel(table);
             case "ads" -> getAdsLabel(table);
+            default -> table;
+        };
+    }
+
+    private String getDwLabel(String table) {
+        return switch (table) {
+            case "fact_congestion_seg_hour" -> "拥堵事实表";
+            case "dim_road_segment" -> "路段维度表";
+            case "fact_trip_event_grid_hour" -> "网格事件事实表";
             default -> table;
         };
     }
